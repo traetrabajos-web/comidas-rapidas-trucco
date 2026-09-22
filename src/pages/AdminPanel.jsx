@@ -518,11 +518,13 @@ export default function AdminPanel({ onLogout }) {
 
         {/* ══════════════ TAB CATEGORÍAS ══════════════ */}
         {activeTab === 'categorias' && (
-          <div className="p-4 md:p-8 space-y-6 max-w-3xl mx-auto w-full">
+          <div className="p-4 md:p-8 space-y-6 md:space-y-8 max-w-5xl mx-auto w-full">
+
+            {/* Header */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
                 <h2 className="text-2xl md:text-3xl font-black text-white">Categorías del Menú</h2>
-                <p className="text-gray-400 text-sm mt-1">Crea, edita y elimina las categorías que aparecen en el menú</p>
+                <p className="text-gray-400 text-sm mt-1">Organiza el menú de Comidas Rápidas Trucco por categorías</p>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -530,91 +532,162 @@ export default function AdminPanel({ onLogout }) {
                     localStorage.removeItem('trucco_cats_cache');
                     localStorage.removeItem('trucco_cats_cache_time');
                     refreshCategories();
-                    showToast('Actualizando categorías...', 'success');
+                    showToast('Actualizando categorías desde el Sheet...', 'success');
                   }}
-                  className="bg-gray-800 hover:bg-gray-700 text-white font-bold p-3 md:px-4 rounded-xl transition flex items-center gap-2"
+                  className="bg-gray-800 hover:bg-gray-700 text-white font-bold p-3 md:px-4 rounded-xl transition flex items-center justify-center gap-2"
                 >
                   <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
                   <span className="hidden md:inline">Actualizar</span>
                 </button>
                 <button
                   onClick={openNewCat}
-                  className="bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-gray-900 font-bold py-3 px-5 rounded-xl transition flex items-center gap-2 shadow-lg shadow-yellow-400/20"
+                  className="bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-gray-900 font-bold py-3 px-5 rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-yellow-400/20"
                 >
                   <Plus className="w-5 h-5" /> Nueva categoría
                 </button>
               </div>
             </div>
 
-            {/* Info banner */}
-            <div className="bg-blue-900/20 border border-blue-800/40 rounded-2xl p-4 text-sm text-blue-200/80 flex items-start gap-3">
-              <Tag className="w-5 h-5 text-blue-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <strong className="text-blue-300">¿Cómo funcionan las categorías?</strong>
-                <p className="mt-1">Las categorías que crees aquí aparecerán como filtros en el menú para tus clientes y como opciones al crear o editar productos.</p>
+            {loading && (
+              <div className="flex items-center gap-2 text-yellow-400 text-sm bg-yellow-400/10 px-4 py-3 rounded-xl border border-yellow-400/20">
+                <RefreshCw className="w-4 h-4 animate-spin" /> Sincronizando con Google Sheets...
+              </div>
+            )}
+
+            {/* Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 hover:border-gray-700 transition">
+                <div className="w-10 h-10 rounded-xl bg-yellow-400/10 flex items-center justify-center mb-3">
+                  <Tag className="w-5 h-5 text-yellow-400" />
+                </div>
+                <div className="text-2xl font-black text-yellow-400">{rawCategories.length}</div>
+                <div className="text-sm text-gray-400 font-medium">Total categorías</div>
+              </div>
+              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 hover:border-gray-700 transition">
+                <div className="w-10 h-10 rounded-xl bg-orange-400/10 flex items-center justify-center mb-3">
+                  <Package className="w-5 h-5 text-orange-400" />
+                </div>
+                <div className="text-2xl font-black text-orange-400">{products.length}</div>
+                <div className="text-sm text-gray-400 font-medium">Productos en total</div>
+              </div>
+              <div className="col-span-2 md:col-span-1 bg-gray-900 border border-gray-800 rounded-2xl p-5 hover:border-gray-700 transition">
+                <div className="w-10 h-10 rounded-xl bg-green-400/10 flex items-center justify-center mb-3">
+                  <ChefHat className="w-5 h-5 text-green-400" />
+                </div>
+                <div className="text-2xl font-black text-green-400">
+                  {rawCategories.length > 0 ? (Math.round(products.length / rawCategories.length * 10) / 10) : 0}
+                </div>
+                <div className="text-sm text-gray-400 font-medium">Productos por categoría</div>
               </div>
             </div>
 
-            {/* Lista de categorías */}
+            {/* Grid de tarjetas */}
             {rawCategories.length === 0 ? (
-              <div className="text-center py-16 bg-gray-900 border border-gray-800 rounded-3xl">
-                <Tag className="w-16 h-16 text-gray-700 mx-auto mb-4" />
+              <div className="text-center py-20 bg-gray-900 border-2 border-dashed border-gray-700 rounded-3xl">
+                <div className="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Tag className="w-10 h-10 text-gray-600" />
+                </div>
                 <h3 className="text-xl font-bold text-gray-300">Sin categorías todavía</h3>
-                <p className="text-gray-500 mt-2 mb-6">Crea tu primera categoría para organizar los productos.</p>
-                <button onClick={openNewCat} className="bg-yellow-400 text-gray-900 font-bold px-6 py-3 rounded-xl hover:bg-yellow-300 transition">
-                  + Crear primera categoría
+                <p className="text-gray-500 mt-2 mb-6 max-w-xs mx-auto">Crea categorías para que tus clientes puedan filtrar el menú fácilmente.</p>
+                <button
+                  onClick={openNewCat}
+                  className="bg-gradient-to-r from-yellow-400 to-yellow-500 text-gray-900 font-bold px-7 py-3 rounded-xl hover:from-yellow-300 hover:to-yellow-400 transition shadow-lg shadow-yellow-400/20 inline-flex items-center gap-2"
+                >
+                  <Plus className="w-5 h-5" /> Crear primera categoría
                 </button>
               </div>
             ) : (
-              <div className="space-y-3">
-                {rawCategories.map((cat) => {
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                {rawCategories.map((cat, idx) => {
                   const count = products.filter(p => p.category === cat).length;
+                  const palettes = [
+                    { bg: 'from-yellow-500/20 to-orange-500/5',  border: 'border-yellow-500/30',  icon: 'bg-yellow-400/20 text-yellow-400',  bar: 'bg-yellow-400',  badge: 'text-yellow-400' },
+                    { bg: 'from-orange-500/20 to-red-500/5',     border: 'border-orange-500/30',  icon: 'bg-orange-400/20 text-orange-400',  bar: 'bg-orange-400',  badge: 'text-orange-400' },
+                    { bg: 'from-blue-500/20 to-cyan-500/5',      border: 'border-blue-500/30',    icon: 'bg-blue-400/20 text-blue-400',      bar: 'bg-blue-400',    badge: 'text-blue-400' },
+                    { bg: 'from-purple-500/20 to-pink-500/5',    border: 'border-purple-500/30',  icon: 'bg-purple-400/20 text-purple-400',  bar: 'bg-purple-400',  badge: 'text-purple-400' },
+                    { bg: 'from-green-500/20 to-emerald-500/5',  border: 'border-green-500/30',   icon: 'bg-green-400/20 text-green-400',    bar: 'bg-green-400',   badge: 'text-green-400' },
+                    { bg: 'from-pink-500/20 to-rose-500/5',      border: 'border-pink-500/30',    icon: 'bg-pink-400/20 text-pink-400',      bar: 'bg-pink-400',    badge: 'text-pink-400' },
+                  ];
+                  const pal = palettes[idx % palettes.length];
                   return (
-                    <div key={cat} className="bg-gray-900 border border-gray-800 rounded-2xl p-5 flex items-center justify-between gap-4 hover:border-gray-700 transition">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-yellow-400/10 border border-yellow-400/20 rounded-xl flex items-center justify-center flex-shrink-0">
-                          <Tag className="w-6 h-6 text-yellow-400" />
+                    <div
+                      key={cat}
+                      className={`relative bg-gradient-to-br ${pal.bg} border ${pal.border} rounded-3xl overflow-hidden hover:scale-[1.02] hover:shadow-2xl hover:shadow-black/40 transition-all duration-200`}
+                    >
+                      <div className="p-6">
+                        {/* Ícono + badge contador */}
+                        <div className="flex items-start justify-between mb-5">
+                          <div className={`w-14 h-14 rounded-2xl ${pal.icon} flex items-center justify-center shadow-md`}>
+                            <Tag className="w-7 h-7" />
+                          </div>
+                          <span className={`text-xs font-bold px-3 py-1.5 rounded-full bg-gray-900/60 ${pal.badge} border ${pal.border} backdrop-blur-sm`}>
+                            {count} {count === 1 ? 'producto' : 'productos'}
+                          </span>
                         </div>
-                        <div>
-                          <h3 className="font-bold text-white text-lg">{cat}</h3>
-                          <p className="text-sm text-gray-500">
-                            {count === 0 ? 'Sin productos' : `${count} producto${count !== 1 ? 's' : ''}`}
-                          </p>
+
+                        {/* Nombre de la categoría */}
+                        <h3 className="text-xl font-black text-white mb-4 leading-tight">{cat}</h3>
+
+                        {/* Barra de progreso */}
+                        {products.length > 0 && (
+                          <div className="mb-5">
+                            <div className="flex justify-between text-xs text-gray-500 mb-1.5">
+                              <span>% del catálogo</span>
+                              <span className={pal.badge}>{Math.round(count / products.length * 100)}%</span>
+                            </div>
+                            <div className="w-full h-2 bg-gray-800/80 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${pal.bar} transition-all duration-700`}
+                                style={{ width: `${Math.round(count / products.length * 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Botones de acción */}
+                        <div className="grid grid-cols-2 gap-2 pt-4 border-t border-white/10">
+                          <button
+                            onClick={() => openEditCat(cat)}
+                            className="flex items-center justify-center gap-2 py-2.5 text-sm font-semibold text-white bg-white/10 hover:bg-white/20 rounded-xl transition"
+                          >
+                            <Pencil className="w-4 h-4" /> Editar
+                          </button>
+                          <button
+                            onClick={() => setDeleteCatConfirm(cat)}
+                            className="flex items-center justify-center gap-2 py-2.5 text-sm font-semibold text-red-400 bg-red-900/20 hover:bg-red-900/40 rounded-xl transition"
+                          >
+                            <Trash2 className="w-4 h-4" /> Eliminar
+                          </button>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        <button
-                          onClick={() => openEditCat(cat)}
-                          className="flex items-center gap-2 px-3 py-2 text-blue-400 hover:text-blue-300 bg-blue-900/20 hover:bg-blue-900/40 rounded-xl transition text-sm"
-                          title="Editar"
-                        >
-                          <Pencil className="w-4 h-4" />
-                          <span className="hidden sm:inline">Editar</span>
-                        </button>
-                        <button
-                          onClick={() => setDeleteCatConfirm(cat)}
-                          className="flex items-center gap-2 px-3 py-2 text-red-400 hover:text-red-300 bg-red-900/20 hover:bg-red-900/40 rounded-xl transition text-sm"
-                          title="Eliminar"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                          <span className="hidden sm:inline">Eliminar</span>
-                        </button>
                       </div>
                     </div>
                   );
                 })}
+
+                {/* Tarjeta "Agregar nueva" */}
+                <button
+                  onClick={openNewCat}
+                  className="border-2 border-dashed border-gray-700 hover:border-yellow-400/60 rounded-3xl p-6 flex flex-col items-center justify-center gap-3 text-gray-600 hover:text-yellow-400 transition-all duration-200 min-h-[220px] group"
+                >
+                  <div className="w-14 h-14 rounded-2xl bg-gray-800 group-hover:bg-yellow-400/10 flex items-center justify-center transition">
+                    <Plus className="w-7 h-7" />
+                  </div>
+                  <span className="font-bold text-sm">Nueva categoría</span>
+                </button>
               </div>
             )}
 
-            {/* Nota instrucciones Sheet */}
+            {/* Nota Apps Script */}
             <div className="bg-orange-900/20 border border-orange-800/40 rounded-2xl p-4 text-sm text-orange-200/80 flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
               <div>
-                <strong className="text-orange-300">Recuerda:</strong> Para que los cambios se guarden en Google Sheets, el Apps Script debe estar actualizado con soporte para <code className="bg-orange-900/30 px-1 rounded">saveCategories</code>. Consulta las instrucciones del Apps Script si aún no lo has actualizado.
+                <strong className="text-orange-300">Para sincronizar con Google Sheets:</strong> Actualiza el Apps Script con el código nuevo que soporta <code className="bg-orange-900/30 px-1 rounded">saveCategories</code>. Los cambios se guardan localmente de inmediato, pero para que queden en el Excel necesitas actualizar el script.
               </div>
             </div>
           </div>
         )}
+
+
 
         {/* ══════════════ TAB PEDIDOS ══════════════ */}
         {activeTab === 'pedidos' && (
