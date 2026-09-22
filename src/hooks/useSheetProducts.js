@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════
-// Hook para cargar productos desde Google Sheets
+// Hook para cargar productos Y categorías desde Google Sheets
 // El admin edita el Sheet y los cambios aparecen
 // automáticamente en la página para todos.
 // ═══════════════════════════════════════════════════
@@ -9,8 +9,10 @@ import { products as fallbackProducts, categories as fallbackCategories } from '
 
 // ▶ ID del Google Sheet de Comidas Rápidas Trucco
 const SHEET_ID = '15Ba4vVjMyNbmPhk_obKKbkUGa0oJr9r-ANuI_G-TzHk';
-// GID 434772837 = pestaña "productos_trucco" con exportación directa en tiempo real
+// GID 434772837 = pestaña "productos_trucco"
 const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=434772837`;
+// GID 1947904445 = pestaña "categorias"
+const CATEGORIES_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=1947904445`;
 // Apps Script para escribir desde el panel de admin
 export const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxEPuHcr7MrQeElzbgeeYDTdqnw9uww66SypR0izc8ktIgaTZZNI4dWfqr4Cs6wEG00/exec';
 
@@ -18,6 +20,8 @@ export const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxEPuHcr
 const CACHE_TTL = 5 * 60 * 1000;
 const CACHE_KEY = 'trucco_sheet_cache';
 const CACHE_TIME_KEY = 'trucco_sheet_cache_time';
+const CACHE_CATS_KEY = 'trucco_cats_cache';
+const CACHE_CATS_TIME_KEY = 'trucco_cats_cache_time';
 
 /**
  * Parsea una línea CSV respetando celdas con comillas y comas internas.
@@ -86,8 +90,31 @@ function csvToProducts(csvText) {
 }
 
 /**
+ * Convierte el CSV de la pestaña categorias a un array de strings
+ * con la forma ["Todos", "Hamburguesas", "Bebidas", ...]
+ */
+function csvToCategories(csvText) {
+  const lines = csvText.trim().split('\n');
+  if (lines.length < 2) return null;
+
+  // Saltar fila de encabezados (id, nombre)
+  const dataLines = lines.slice(1);
+  const cats = ['Todos'];
+
+  dataLines.forEach(line => {
+    const cols = parseCSVLine(line);
+    const [id, nombre] = cols;
+    if (id && nombre && nombre.trim()) {
+      cats.push(nombre.trim());
+    }
+  });
+
+  return cats.length > 1 ? cats : null;
+}
+
+/**
  * Extrae las categorías únicas de la lista de productos
- * en el mismo orden que aparecen en el Sheet.
+ * — usado como fallback si la pestaña categorías está vacía.
  */
 function extractCategories(products) {
   const seen = new Set();
@@ -105,7 +132,7 @@ function extractCategories(products) {
  * Hook principal — úsalo en App.jsx en lugar de importar
  * products y categories directamente de data/products.js
  *
- * Retorna: { products, categories, loading, error, refresh }
+ * Retorna: { products, categories, loading, error, refresh, refreshCategories }
  */
 export function useSheetProducts() {
   const [products, setProducts] = useState(() => {
@@ -120,6 +147,15 @@ export function useSheetProducts() {
   });
 
   const [categories, setCategories] = useState(() => {
+    // Primero intentar caché de categorías dedicado
+    try {
+      const cachedCats = localStorage.getItem(CACHE_CATS_KEY);
+      const cachedCatsTime = localStorage.getItem(CACHE_CATS_TIME_KEY);
+      if (cachedCats && cachedCatsTime && Date.now() - Number(cachedCatsTime) < CACHE_TTL) {
+        return JSON.parse(cachedCats);
+      }
+    } catch {}
+    // Fallback: derivar de productos cacheados
     try {
       const cached = localStorage.getItem(CACHE_KEY);
       const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
@@ -134,6 +170,7 @@ export function useSheetProducts() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  // Carga productos desde Sheet
   const fetchFromSheet = async () => {
     setLoading(true);
     setError(null);
@@ -144,25 +181,54 @@ export function useSheetProducts() {
       const parsed = csvToProducts(csv);
       if (parsed) {
         setProducts(parsed);
-        setCategories(extractCategories(parsed));
         localStorage.setItem(CACHE_KEY, JSON.stringify(parsed));
         localStorage.setItem(CACHE_TIME_KEY, String(Date.now()));
       }
     } catch (err) {
-      console.warn('No se pudo cargar el Sheet, usando datos locales:', err.message);
+      console.warn('No se pudo cargar el Sheet de productos, usando datos locales:', err.message);
       setError(err.message);
-      // Fallback silencioso: ya están los datos de products.js en el estado
     } finally {
       setLoading(false);
     }
   };
 
+  // Carga categorías desde Sheet
+  const fetchCategoriesFromSheet = async () => {
+    try {
+      const resp = await fetch(CATEGORIES_CSV_URL + '&t=' + Date.now());
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const csv = await resp.text();
+      const parsed = csvToCategories(csv);
+      if (parsed) {
+        setCategories(parsed);
+        localStorage.setItem(CACHE_CATS_KEY, JSON.stringify(parsed));
+        localStorage.setItem(CACHE_CATS_TIME_KEY, String(Date.now()));
+      }
+    } catch (err) {
+      console.warn('No se pudo cargar categorías del Sheet:', err.message);
+      // Silently fall back to product-derived categories
+    }
+  };
+
+  const refresh = async () => {
+    await Promise.all([fetchFromSheet(), fetchCategoriesFromSheet()]);
+  };
+
+  const refreshCategories = () => {
+    localStorage.removeItem(CACHE_CATS_KEY);
+    localStorage.removeItem(CACHE_CATS_TIME_KEY);
+    return fetchCategoriesFromSheet();
+  };
+
   useEffect(() => {
-    // Solo cargar del Sheet si el caché expiró
     const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
     const cacheExpired = !cachedTime || Date.now() - Number(cachedTime) > CACHE_TTL;
     if (cacheExpired) fetchFromSheet();
+
+    const cachedCatsTime = localStorage.getItem(CACHE_CATS_TIME_KEY);
+    const catsCacheExpired = !cachedCatsTime || Date.now() - Number(cachedCatsTime) > CACHE_TTL;
+    if (catsCacheExpired) fetchCategoriesFromSheet();
   }, []);
 
-  return { products, categories, loading, error, refresh: fetchFromSheet };
+  return { products, categories, loading, error, refresh, refreshCategories };
 }
