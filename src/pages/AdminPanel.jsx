@@ -8,7 +8,7 @@ import { useAdminProducts } from '../hooks/useAdminProducts';
 import AdminProductForm from './AdminProductForm';
 
 export default function AdminPanel({ onLogout }) {
-  const { products, categories, loading, error, addProduct, updateProduct, deleteProduct, refresh } = useAdminProducts();
+  const { products, categories, loading, isSaving, error, addProduct, updateProduct, deleteProduct, refresh } = useAdminProducts();
 
   const [activeTab, setActiveTab] = useState('productos'); // 'productos' | 'pedidos'
   const [orders, setOrders] = useState([]);
@@ -67,10 +67,10 @@ export default function AdminPanel({ onLogout }) {
     try {
       if (editingProduct) {
         await updateProduct(editingProduct.id, formData);
-        showToast(`"${formData.name}" guardado en Google Sheets.`);
+        showToast(`"${formData.name}" guardado exitosamente.`);
       } else {
         await addProduct(formData);
-        showToast(`"${formData.name}" guardado en Google Sheets.`);
+        showToast(`"${formData.name}" creado exitosamente.`);
       }
       setView('list');
       setEditingProduct(null);
@@ -94,23 +94,22 @@ export default function AdminPanel({ onLogout }) {
   };
 
   const confirmDelete = async () => {
-    if (deleteConfirm) {
-      try {
-        await deleteProduct(deleteConfirm.id);
-        showToast(`"${deleteConfirm.name}" eliminado de Google Sheets.`, 'warning');
-      } catch (e) {
-        showToast('Error al eliminar', 'error');
-      }
+    if (!deleteConfirm) return;
+    try {
+      await deleteProduct(deleteConfirm.id);
+      showToast(`"${deleteConfirm.name}" eliminado.`);
       setDeleteConfirm(null);
+    } catch (e) {
+      showToast('Error al eliminar', 'error');
     }
   };
 
-// Filtrar productos
-  const filteredProducts = products.filter(p => {
-    const matchSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.category.toLowerCase().includes(searchQuery.toLowerCase());
+  const filteredProducts = products.filter((p) => {
     const matchCategory = filterCategory === 'Todos' || p.category === filterCategory;
-    return matchSearch && matchCategory;
+    const matchQuery =
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.description.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchCategory && matchQuery;
   });
 
   // Estadísticas
@@ -135,6 +134,20 @@ export default function AdminPanel({ onLogout }) {
 
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col md:flex-row font-sans">
+      {/* Overlay de carga profesional mientras guarda o sincroniza con Google Sheets */}
+      {isSaving && (
+        <div className="fixed inset-0 bg-black/85 z-[100] backdrop-blur-md flex flex-col items-center justify-center p-6 text-center animate-fade-in">
+          <div className="relative mb-6">
+            <div className="w-20 h-20 border-4 border-yellow-400/20 border-t-yellow-400 rounded-full animate-spin" />
+            <img src="/logo.png" alt="Trucco" className="w-10 h-10 object-contain absolute inset-0 m-auto drop-shadow-md" />
+          </div>
+          <h3 className="text-xl font-bold text-white mb-2">Guardando cambios...</h3>
+          <p className="text-sm text-gray-300 max-w-sm">
+            Sincronizando la información con tu menú y la hoja de cálculo. Por favor espera un momento.
+          </p>
+        </div>
+      )}
+
       {/* Toast */}
       {toast && (
         <div className={`fixed top-4 right-4 z-50 flex items-center gap-3 px-5 py-3 rounded-xl shadow-2xl transition-all ${toast.type === 'success' ? 'bg-green-800 border border-green-600' : 'bg-yellow-800 border border-yellow-600'}`}>

@@ -86,14 +86,17 @@ export default function AdminProductForm({ product, onSave, onCancel }) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!validate()) return;
     setSaving(true);
-    setTimeout(() => {
-      onSave(form);
+    try {
+      await onSave(form);
+    } catch (err) {
+      console.error(err);
+    } finally {
       setSaving(false);
-    }, 400);
+    }
   };
 
   return (

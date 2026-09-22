@@ -82,6 +82,7 @@ export function useAdminProducts() {
     products,
     categories,
     loading: loadingSheet || isSaving,
+    isSaving,
     error: saveError,
     addProduct,
     updateProduct,
