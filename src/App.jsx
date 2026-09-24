@@ -706,7 +706,7 @@ function App() {
               <li className="flex items-center gap-3">
                 <Phone className="w-5 h-5 text-primary shrink-0" />
                 <a href={`https://wa.me/${WHATSAPP_NUMBER}`} target="_blank" rel="noreferrer" className="hover:text-white transition-colors">
-                  WhatsApp: {WHATSAPP_NUMBER}
+                  WhatsApp: 317 192 2866
                 </a>
               </li>
             </ul>

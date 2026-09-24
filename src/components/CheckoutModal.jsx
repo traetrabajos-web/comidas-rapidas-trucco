@@ -78,7 +78,7 @@ export default function CheckoutModal({ isOpen, onClose, cart, onConfirmOrder })
       return;
     }
 
-    // 4. Validaciones estrictas de datos y anti-spam
+    // 4. Validaciones estrictas de datos
     const cleanName = formData.name.trim();
     if (cleanName.length < 3) {
       setErrorMessage('Por favor escribe tu nombre completo (mínimo 3 letras).');
@@ -86,8 +86,8 @@ export default function CheckoutModal({ isOpen, onClose, cart, onConfirmOrder })
     }
 
     const cleanPhone = formData.phone.replace(/\D/g, '');
-    if (cleanPhone.length !== 10 || !cleanPhone.startsWith('3')) {
-      setErrorMessage('Por favor ingresa un número celular válido de 10 dígitos que empiece por 3 (Ej: 304 304 0067).');
+    if (cleanPhone.length < 10) {
+      setErrorMessage('Por favor ingresa un número de teléfono válido de 10 dígitos (Ej: 310 123 4567).');
       return;
     }
 
@@ -99,16 +99,7 @@ export default function CheckoutModal({ isOpen, onClose, cart, onConfirmOrder })
       }
     }
 
-    // 5. Control anti-duplicados: Evitar enviar exactamente el mismo pedido en menos de 2 minutos
-    const lastOrderHash = localStorage.getItem('trucco_last_order_hash');
-    const currentOrderHash = `${cleanPhone}_${total}_${cart.map(i => `${i.id || i.name}x${i.quantity}`).join('_')}`;
-    const lastOrderTime = Number(localStorage.getItem('trucco_last_order_timestamp') || 0);
-    if (lastOrderHash === currentOrderHash && (Date.now() - lastOrderTime < 120000)) {
-      setErrorMessage('⚠️ Ya enviaste este mismo pedido hace un momento. Si deseas modificarlo o confirmar, escríbenos directamente a WhatsApp.');
-      return;
-    }
-
-    // Bloquear el botón inmediatamente para proteger de envíos repetidos
+    // Bloquear el botón inmediatamente para proteger de spam / spam-clicking
     setIsSubmitting(true);
 
     try {
@@ -204,51 +195,61 @@ export default function CheckoutModal({ isOpen, onClose, cart, onConfirmOrder })
       }
       rawWhatsAppText += `\n¡Quedo atento a su confirmación! Muchas gracias. 🙌`;
 
-      // Registrar timestamp y hash en almacenamiento local para anti-spam y anti-duplicados persistente
+      // Registrar timestamp en almacenamiento local para anti-spam persistente
       localStorage.setItem('trucco_last_order_timestamp', Date.now().toString());
-      localStorage.setItem('trucco_last_order_hash', currentOrderHash);
       setCooldownRemaining(COOLDOWN_SECONDS);
 
-      // --- Guardar en Google Sheets (Hoja de pedidos) ---
-      const orderData = {
-        id: String(orderId),
-        date: dateFormatted,
-        time: timeFormatted,
-        name: cleanName,
-        phone: cleanPhone,
-        orderType: formData.orderType,
-        address: formData.orderType === 'domicilio' ? (formData.address || '').trim() : '',
-        notes: formData.notes ? formData.notes.trim() : '',
-        itemsSummary: cart.map(item => {
-          const variantText = item.variantLabel && item.variantLabel !== item.name ? ` (${item.variantLabel})` : '';
-          return `${item.quantity}x ${item.name}${variantText}`;
-        }).join(', '),
-        items: cart,
-        total,
-        status: 'pending'
-      };
-
-      try {
-        await fetch(APPS_SCRIPT_URL, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify({ action: 'saveOrder', order: orderData })
-        });
-      } catch (sheetErr) {
-        console.warn('No se pudo enviar el pedido a Google Sheets:', sheetErr);
-      }
-
-      // Guardar también en el almacenamiento local como respaldo
+      // --- NUEVO: Guardar en el historial local del dashboard ---
       try {
         const historyStr = localStorage.getItem('trucco_order_history');
         const history = historyStr ? JSON.parse(historyStr) : [];
-        history.unshift(orderData);
-        localStorage.setItem('trucco_order_history', JSON.stringify(history.slice(0, 100)));
+        history.push({
+          id: orderId,
+          date: dateFormatted,
+          time: timeFormatted,
+          name: cleanName,
+          phone: cleanPhone,
+          orderType: formData.orderType,
+          address: formData.address,
+          notes: formData.notes,
+          items: cart,
+          total,
+          status: 'pending' // pending, completed
+        });
+        localStorage.setItem('trucco_order_history', JSON.stringify(history));
       } catch (err) {
         console.error("Error guardando historial local", err);
       }
       // -----------------------------------------------------------
+
+      // --- NUEVO: Guardar pedido en Google Sheets (pestaña 'pedidos') ---
+      try {
+        fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({
+            action: 'saveOrder',
+            order: {
+              id: orderId,
+              date: dateFormatted,
+              time: timeFormatted,
+              name: cleanName,
+              phone: cleanPhone,
+              orderType: formData.orderType,
+              address: formData.address || '',
+              notes: formData.notes || '',
+              items: cart,
+              itemsSummary: cart.map(i => `${i.quantity}x ${i.name}${i.variantLabel && i.variantLabel !== i.name ? ` (${i.variantLabel})` : ''}`).join(', '),
+              total: total,
+              status: 'pending'
+            }
+          })
+        }).catch(e => console.warn('Fetch saveOrder async caught:', e));
+      } catch (err) {
+        console.warn("Error enviando pedido a Google Sheets:", err);
+      }
+      // -----------------------------------------------------------------
 
       // CODIFICACIÓN ESTRICTA: encodeURIComponent garantiza cero caracteres corruptos o 
       const encodedMessage = encodeURIComponent(rawWhatsAppText);

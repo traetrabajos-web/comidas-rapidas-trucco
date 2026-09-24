@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { ArrowLeft, Save, X, Upload, Plus, Trash2, Image as ImageIcon, Tag, DollarSign, AlignLeft, ChefHat } from 'lucide-react';
+import { Save, X, Upload, Plus, Trash2, Image as ImageIcon, Tag, DollarSign, AlignLeft, ChefHat, FolderPlus } from 'lucide-react';
 
-const CATEGORIES = [
+const CATEGORIES_FALLBACK = [
   'Perros Calientes',
   'Hamburguesas',
   'Salchipapas',
@@ -13,18 +13,31 @@ const CATEGORIES = [
 
 const emptyVariant = { label: '', price: 0 };
 
-export default function AdminProductForm({ product, onSave, onCancel }) {
+export default function AdminProductForm({ product, categories: dynamicCategories = [], onSave, onCancel }) {
   const isEditing = !!product;
+
+  // Filtrar categorías válidas dinámicas (sin 'Todos')
+  const baseList = Array.isArray(dynamicCategories) && dynamicCategories.length > 0
+    ? dynamicCategories.filter(c => c && c !== 'Todos')
+    : CATEGORIES_FALLBACK;
+
+  // Si el producto actual tiene una categoría que no está en la lista, incluirla
+  const categoryOptions = product?.category && !baseList.includes(product.category)
+    ? [product.category, ...baseList]
+    : baseList;
 
   const [form, setForm] = useState({
     name: product?.name || '',
     description: product?.description || '',
-    category: product?.category || CATEGORIES[0],
+    category: product?.category || categoryOptions[0] || 'Hamburguesas',
     image: product?.image || '',
     variants: product?.variants?.length
       ? product.variants.map(v => ({ label: v.label, price: v.price }))
       : [{ ...emptyVariant }],
   });
+
+  const [isCustomCategory, setIsCustomCategory] = useState(false);
+  const [customCategoryName, setCustomCategoryName] = useState('');
 
   const [imagePreview, setImagePreview] = useState(product?.image || null);
   const [imageMode, setImageMode] = useState(product?.image?.startsWith('data:') ? 'upload' : 'url');
@@ -75,7 +88,10 @@ export default function AdminProductForm({ product, onSave, onCancel }) {
   const validate = () => {
     const newErrors = {};
     if (!form.name.trim()) newErrors.name = 'El nombre es obligatorio.';
-    if (!form.category) newErrors.category = 'Selecciona una categoría.';
+    
+    const activeCategory = isCustomCategory ? customCategoryName.trim() : form.category;
+    if (!activeCategory) newErrors.category = 'Selecciona o escribe una categoría.';
+    
     if (!form.image) newErrors.image = 'La imagen es obligatoria.';
     if (form.variants.length === 0) newErrors.variants = 'Agrega al menos una variante/precio.';
     form.variants.forEach((v, i) => {
@@ -86,17 +102,24 @@ export default function AdminProductForm({ product, onSave, onCancel }) {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
     if (!validate()) return;
     setSaving(true);
-    try {
-      await onSave(form);
-    } catch (err) {
-      console.error(err);
-    } finally {
+
+    const activeCategory = isCustomCategory && customCategoryName.trim()
+      ? customCategoryName.trim()
+      : form.category;
+
+    const dataToSave = {
+      ...form,
+      category: activeCategory
+    };
+
+    setTimeout(() => {
+      onSave(dataToSave);
       setSaving(false);
-    }
+    }, 300);
   };
 
   return (
@@ -141,14 +164,14 @@ export default function AdminProductForm({ product, onSave, onCancel }) {
             <button
               type="button"
               onClick={() => setImageMode('upload')}
-              className={`flex-1 py-2 rounded-xl text-sm font-medium transition ${imageMode === 'upload' ? 'bg-yellow-400 text-gray-900' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+              className={`flex-1 py-2 rounded-xl text-sm font-medium transition ${imageMode === 'upload' ? 'bg-yellow-400 text-gray-900 font-bold' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
             >
               📁 Subir desde PC/Celular
             </button>
             <button
               type="button"
               onClick={() => setImageMode('url')}
-              className={`flex-1 py-2 rounded-xl text-sm font-medium transition ${imageMode === 'url' ? 'bg-yellow-400 text-gray-900' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+              className={`flex-1 py-2 rounded-xl text-sm font-medium transition ${imageMode === 'url' ? 'bg-yellow-400 text-gray-900 font-bold' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
             >
               🔗 URL de imagen
             </button>
@@ -235,18 +258,50 @@ export default function AdminProductForm({ product, onSave, onCancel }) {
             />
           </div>
 
-          {/* Categoría */}
+          {/* Categoría Dinámica */}
           <div>
-            <label className="text-sm text-gray-300 mb-1.5 block font-medium">Categoría</label>
-            <select
-              value={form.category}
-              onChange={(e) => setForm(prev => ({ ...prev, category: e.target.value }))}
-              className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-yellow-400 text-sm"
-            >
-              {CATEGORIES.map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-sm text-gray-300 font-medium">Categoría</label>
+              <button
+                type="button"
+                onClick={() => setIsCustomCategory(!isCustomCategory)}
+                className="text-xs text-yellow-400 hover:text-yellow-300 transition flex items-center gap-1 font-semibold"
+              >
+                <FolderPlus className="w-3.5 h-3.5" />
+                {isCustomCategory ? 'Seleccionar existente' : 'Escribir nueva categoría'}
+              </button>
+            </div>
+
+            {isCustomCategory ? (
+              <div>
+                <input
+                  type="text"
+                  value={customCategoryName}
+                  onChange={(e) => {
+                    setCustomCategoryName(e.target.value);
+                    if (errors.category) setErrors(prev => ({ ...prev, category: undefined }));
+                  }}
+                  placeholder="Escribe el nombre de la nueva categoría (Ej. Bebidas, Desgranados...)"
+                  className="w-full bg-gray-800 border border-yellow-500/50 text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-yellow-400 text-sm"
+                  autoFocus
+                />
+                <p className="text-xs text-gray-400 mt-1">Esta nueva categoría se guardará automáticamente en el sistema.</p>
+              </div>
+            ) : (
+              <select
+                value={form.category}
+                onChange={(e) => {
+                  setForm(prev => ({ ...prev, category: e.target.value }));
+                  if (errors.category) setErrors(prev => ({ ...prev, category: undefined }));
+                }}
+                className="w-full bg-gray-800 border border-gray-700 text-white rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-yellow-400 text-sm cursor-pointer"
+              >
+                {categoryOptions.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            )}
+            {errors.category && <p className="text-red-400 text-xs mt-1">{errors.category}</p>}
           </div>
         </div>
 

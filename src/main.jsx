@@ -21,6 +21,7 @@ function AdminRouter() {
 
   const handleLogout = () => {
     sessionStorage.removeItem(SESSION_KEY);
+    sessionStorage.removeItem('trucco_admin_user');
     setAuthed(false);
   };
 

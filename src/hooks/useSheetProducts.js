@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════
-// Hook para cargar productos Y categorías desde Google Sheets
+// Hook para cargar productos y categorías desde Google Sheets
 // El admin edita el Sheet y los cambios aparecen
 // automáticamente en la página para todos.
 // ═══════════════════════════════════════════════════
@@ -8,25 +8,25 @@ import { useState, useEffect } from 'react';
 import { products as fallbackProducts, categories as fallbackCategories } from '../data/products';
 
 // ▶ ID del Google Sheet de Comidas Rápidas Trucco
-const SHEET_ID = '15Ba4vVjMyNbmPhk_obKKbkUGa0oJr9r-ANuI_G-TzHk';
-// GID 434772837 = pestaña "productos_trucco"
-const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=434772837`;
-// GID 1947904445 = pestaña "categorias"
-const CATEGORIES_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=1947904445`;
-// Apps Script para escribir desde el panel de admin
+export const SHEET_ID = '15Ba4vVjMyNbmPhk_obKKbkUGa0oJr9r-ANuI_G-TzHk';
+// GID 434772837 = pestaña "productos_trucco" con exportación directa en tiempo real
+export const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=434772837`;
+// Pestaña "categorias" con exportación directa
+export const SHEET_CATEGORIES_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=categorias`;
+
+// Apps Script v2.0 para escribir desde el panel de admin y registrar pedidos
 export const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwAmwqHiaZ1ttSU-AblYS25gbhyxRQvEtHyVNhfY4abZGZxNiarHRp4eaIb7RmgWLKf/exec';
 
 // Cuánto tiempo guardar el caché (5 minutos)
 const CACHE_TTL = 5 * 60 * 1000;
 const CACHE_KEY = 'trucco_sheet_cache';
+const CACHE_CATEGORIES_KEY = 'trucco_categories_cache';
 const CACHE_TIME_KEY = 'trucco_sheet_cache_time';
-const CACHE_CATS_KEY = 'trucco_cats_cache';
-const CACHE_CATS_TIME_KEY = 'trucco_cats_cache_time';
 
 /**
  * Parsea una línea CSV respetando celdas con comillas y comas internas.
  */
-function parseCSVLine(line) {
+export function parseCSVLine(line) {
   const result = [];
   let current = '';
   let inQuotes = false;
@@ -50,7 +50,7 @@ function parseCSVLine(line) {
  * Convierte el CSV del Google Sheet a un array de productos
  * con el mismo formato que products.js
  */
-function csvToProducts(csvText) {
+export function csvToProducts(csvText) {
   const lines = csvText.trim().split('\n');
   if (lines.length < 2) return null;
 
@@ -90,49 +90,66 @@ function csvToProducts(csvText) {
 }
 
 /**
- * Convierte el CSV de la pestaña categorias a un array de strings
- * con la forma ["Todos", "Hamburguesas", "Bebidas", ...]
+ * Parsea el CSV de la pestaña 'categorias' de Google Sheets
  */
-function csvToCategories(csvText) {
+export function parseCategoriesCSV(csvText) {
+  if (!csvText) return [];
   const lines = csvText.trim().split('\n');
-  if (lines.length < 2) return null;
+  if (lines.length < 2) return [];
 
-  // Saltar fila de encabezados (id, nombre)
-  const dataLines = lines.slice(1);
-  const cats = ['Todos'];
-
-  dataLines.forEach(line => {
-    const cols = parseCSVLine(line);
-    const [id, nombre] = cols;
-    if (id && nombre && nombre.trim()) {
-      cats.push(nombre.trim());
+  const cats = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cols = parseCSVLine(lines[i]);
+    const raw = (cols.length > 1 ? cols[1] : cols[0]) || '';
+    const clean = raw.replace(/^["']|["']$/g, '').trim();
+    if (clean && clean.toLowerCase() !== 'nombre' && clean.toLowerCase() !== 'id' && !cats.includes(clean)) {
+      cats.push(clean);
     }
-  });
-
-  return cats.length > 1 ? cats : null;
-}
-
-/**
- * Extrae las categorías únicas de la lista de productos
- * — usado como fallback si la pestaña categorías está vacía.
- */
-function extractCategories(products) {
-  const seen = new Set();
-  const cats = ['Todos'];
-  products.forEach(p => {
-    if (!seen.has(p.category)) {
-      seen.add(p.category);
-      cats.push(p.category);
-    }
-  });
+  }
   return cats;
 }
 
 /**
- * Hook principal — úsalo en App.jsx en lugar de importar
- * products y categories directamente de data/products.js
- *
- * Retorna: { products, categories, loading, error, refresh, refreshCategories }
+ * Une categorías de la pestaña 'categorias' con las encontradas en productos
+ */
+export function mergeCategories(sheetCategories = [], products = []) {
+  const seen = new Set();
+  const result = ['Todos'];
+
+  // 1. Agregar las categorías oficiales de la pestaña categorias
+  sheetCategories.forEach(cat => {
+    const trimmed = (cat || '').trim();
+    if (trimmed && trimmed !== 'Todos' && !seen.has(trimmed)) {
+      seen.add(trimmed);
+      result.push(trimmed);
+    }
+  });
+
+  // 2. Agregar cualquier categoría que aparezca en los productos
+  products.forEach(p => {
+    const trimmed = (p.category || '').trim();
+    if (trimmed && trimmed !== 'Todos' && !seen.has(trimmed)) {
+      seen.add(trimmed);
+      result.push(trimmed);
+    }
+  });
+
+  // 3. Si no hay categorías, fallback a las categorías por defecto
+  if (result.length === 1) {
+    fallbackCategories.forEach(cat => {
+      if (!seen.has(cat) && cat !== 'Todos') {
+        seen.add(cat);
+        result.push(cat);
+      }
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Hook principal — usado para cargar productos y categorías sincronizados
+ * Retorna: { products, categories, rawCategories, loading, error, refresh }
  */
 export function useSheetProducts() {
   const [products, setProducts] = useState(() => {
@@ -147,21 +164,15 @@ export function useSheetProducts() {
   });
 
   const [categories, setCategories] = useState(() => {
-    // Primero intentar caché de categorías dedicado
     try {
-      const cachedCats = localStorage.getItem(CACHE_CATS_KEY);
-      const cachedCatsTime = localStorage.getItem(CACHE_CATS_TIME_KEY);
-      if (cachedCats && cachedCatsTime && Date.now() - Number(cachedCatsTime) < CACHE_TTL) {
+      const cachedCats = localStorage.getItem(CACHE_CATEGORIES_KEY);
+      const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
+      if (cachedCats && cachedTime && Date.now() - Number(cachedTime) < CACHE_TTL) {
         return JSON.parse(cachedCats);
       }
-    } catch {}
-    // Fallback: derivar de productos cacheados
-    try {
-      const cached = localStorage.getItem(CACHE_KEY);
-      const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
-      if (cached && cachedTime && Date.now() - Number(cachedTime) < CACHE_TTL) {
-        const prods = JSON.parse(cached);
-        return extractCategories(prods);
+      const cachedProds = localStorage.getItem(CACHE_KEY);
+      if (cachedProds) {
+        return mergeCategories([], JSON.parse(cachedProds));
       }
     } catch {}
     return fallbackCategories;
@@ -170,65 +181,63 @@ export function useSheetProducts() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Carga productos desde Sheet
   const fetchFromSheet = async () => {
     setLoading(true);
     setError(null);
     try {
-      const resp = await fetch(SHEET_CSV_URL + '&t=' + Date.now());
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const csv = await resp.text();
-      const parsed = csvToProducts(csv);
-      if (parsed) {
-        setProducts(parsed);
-        localStorage.setItem(CACHE_KEY, JSON.stringify(parsed));
-        localStorage.setItem(CACHE_TIME_KEY, String(Date.now()));
+      // Peticiones paralelas: productos_trucco y categorias
+      const timestamp = Date.now();
+      const [prodResp, catResp] = await Promise.allSettled([
+        fetch(`${SHEET_CSV_URL}&t=${timestamp}`),
+        fetch(`${SHEET_CATEGORIES_URL}&t=${timestamp}`)
+      ]);
+
+      let parsedProducts = null;
+      let parsedCategories = [];
+
+      if (prodResp.status === 'fulfilled' && prodResp.value.ok) {
+        const prodCsv = await prodResp.value.text();
+        parsedProducts = csvToProducts(prodCsv);
       }
+
+      if (catResp.status === 'fulfilled' && catResp.value.ok) {
+        const catCsv = await catResp.value.text();
+        parsedCategories = parseCategoriesCSV(catCsv);
+      }
+
+      if (parsedProducts) {
+        setProducts(parsedProducts);
+        localStorage.setItem(CACHE_KEY, JSON.stringify(parsedProducts));
+      }
+
+      const activeProducts = parsedProducts || products;
+      const mergedCats = mergeCategories(parsedCategories, activeProducts);
+      setCategories(mergedCats);
+      localStorage.setItem(CACHE_CATEGORIES_KEY, JSON.stringify(mergedCats));
+      localStorage.setItem(CACHE_TIME_KEY, String(Date.now()));
+
     } catch (err) {
-      console.warn('No se pudo cargar el Sheet de productos, usando datos locales:', err.message);
+      console.warn('No se pudo cargar el Sheet, usando datos locales:', err.message);
       setError(err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Carga categorías desde Sheet
-  const fetchCategoriesFromSheet = async () => {
-    try {
-      const resp = await fetch(CATEGORIES_CSV_URL + '&t=' + Date.now());
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const csv = await resp.text();
-      const parsed = csvToCategories(csv);
-      if (parsed) {
-        setCategories(parsed);
-        localStorage.setItem(CACHE_CATS_KEY, JSON.stringify(parsed));
-        localStorage.setItem(CACHE_CATS_TIME_KEY, String(Date.now()));
-      }
-    } catch (err) {
-      console.warn('No se pudo cargar categorías del Sheet:', err.message);
-      // Silently fall back to product-derived categories
-    }
-  };
-
-  const refresh = async () => {
-    await Promise.all([fetchFromSheet(), fetchCategoriesFromSheet()]);
-  };
-
-  const refreshCategories = () => {
-    localStorage.removeItem(CACHE_CATS_KEY);
-    localStorage.removeItem(CACHE_CATS_TIME_KEY);
-    return fetchCategoriesFromSheet();
-  };
-
   useEffect(() => {
     const cachedTime = localStorage.getItem(CACHE_TIME_KEY);
     const cacheExpired = !cachedTime || Date.now() - Number(cachedTime) > CACHE_TTL;
-    if (cacheExpired) fetchFromSheet();
-
-    const cachedCatsTime = localStorage.getItem(CACHE_CATS_TIME_KEY);
-    const catsCacheExpired = !cachedCatsTime || Date.now() - Number(cachedCatsTime) > CACHE_TTL;
-    if (catsCacheExpired) fetchCategoriesFromSheet();
+    if (cacheExpired) {
+      fetchFromSheet();
+    }
   }, []);
 
-  return { products, categories, loading, error, refresh, refreshCategories };
+  return {
+    products,
+    categories,
+    rawCategories: categories.filter(c => c !== 'Todos'),
+    loading,
+    error,
+    refresh: fetchFromSheet
+  };
 }

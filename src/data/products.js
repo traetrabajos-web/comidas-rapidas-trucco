@@ -1,10 +1,10 @@
 // ═══════════════════════════════════════════════════
 // DATOS REALES - COMIDAS RÁPIDAS TRUCCO
 // Carta oficial con precios reales e imágenes individuales
-// WhatsApp: 3043040067
+// WhatsApp: 3171922866
 // ═══════════════════════════════════════════════════
 
-export const WHATSAPP_NUMBER = "3171922866";
+export const WHATSAPP_NUMBER = "573171922866";
 
 export const categories = [
   "Todos",
