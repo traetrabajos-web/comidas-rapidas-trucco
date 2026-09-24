@@ -193,7 +193,7 @@ function App() {
           </div>
         </div>
 
-        <div className="max-w-7xl mx-auto px-4 h-16 sm:h-20 flex items-center justify-between">
+        <div className="w-full max-w-[1700px] 2xl:max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 h-16 sm:h-20 flex items-center justify-between">
           <div className="cursor-pointer z-50 relative" onClick={() => scrollTo('inicio')}>
             <img
               src="/logo.png"
@@ -324,7 +324,7 @@ function App() {
 
         {/* Contenido superpuesto con anclaje superior estable */}
         <div className="relative z-10 w-full pt-36 sm:pt-40 lg:pt-44 pb-16">
-          <div className="max-w-7xl mx-auto px-6 w-full">
+          <div className="w-full max-w-[1700px] 2xl:max-w-[1920px] mx-auto px-6 lg:px-12">
             <div className="max-w-2xl">
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
@@ -423,7 +423,7 @@ function App() {
         {/* Decoración */}
         <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-primary via-secondary to-primary"></div>
 
-        <div className="max-w-7xl mx-auto px-4">
+        <div className="w-full max-w-[1700px] 2xl:max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12">
           <div className="text-center mb-16">
             <span className="text-primary font-bold uppercase tracking-[0.2em] text-sm">Conócenos</span>
             <h2 className="text-4xl md:text-5xl font-black text-neutral mt-3">Sobre <span className="text-primary">Trucco</span></h2>
@@ -574,7 +574,7 @@ function App() {
       <main id="menu" className="w-full bg-cream py-24 relative">
         <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-secondary via-primary to-secondary"></div>
 
-        <div className="max-w-7xl mx-auto px-4">
+        <div className="w-full max-w-[1700px] 2xl:max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12">
           <div className="text-center mb-10">
             <span className="text-primary font-bold uppercase tracking-[0.2em] text-sm">Descubre</span>
             <h3 className="text-4xl md:text-5xl font-black text-neutral mt-3">Nuestro <span className="text-secondary">Menú</span></h3>
@@ -597,7 +597,7 @@ function App() {
             ))}
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 min-[1900px]:grid-cols-6 gap-6">
             <AnimatePresence mode="popLayout">
               {filteredProducts.map((product) => (
                 <motion.div
@@ -621,7 +621,7 @@ function App() {
       <section id="contacto" className="py-24 bg-white relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-primary via-secondary to-primary"></div>
 
-        <div className="max-w-6xl mx-auto px-4">
+        <div className="w-full max-w-[1700px] 2xl:max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12">
           <div className="text-center mb-16">
             <span className="text-primary font-bold uppercase tracking-[0.2em] text-sm">Contacto</span>
             <h3 className="text-4xl md:text-5xl font-black text-neutral mt-3">Haz Tu <span className="text-secondary">Pedido</span></h3>
@@ -675,7 +675,7 @@ function App() {
 
       {/* ═══════════════ FOOTER ═══════════════ */}
       <footer className="bg-neutral pt-16 pb-8 border-t-4 border-secondary">
-        <div className="max-w-7xl mx-auto px-4 grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
+        <div className="w-full max-w-[1700px] 2xl:max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
           <div className="md:col-span-2">
             <img src="/logo.png" alt="Trucco" className="h-24 md:h-32 mb-6 object-contain" />
             <p className="text-gray-400 max-w-sm leading-relaxed">
@@ -712,7 +712,7 @@ function App() {
             </ul>
           </div>
         </div>
-        <div className="max-w-7xl mx-auto px-4 text-center text-gray-600 text-sm font-medium pt-8 border-t border-white/10">
+        <div className="w-full max-w-[1700px] 2xl:max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-12 text-center text-gray-600 text-sm font-medium pt-8 border-t border-white/10">
           &copy; {new Date().getFullYear()} Comidas Rápidas Trucco — Todos los derechos reservados.
         </div>
       </footer>

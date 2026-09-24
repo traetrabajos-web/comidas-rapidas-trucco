@@ -780,12 +780,12 @@ export default function AdminPanel({ onLogout }) {
         </div>
       </div>
 
-      {/* ══════════════ CONTENIDO PRINCIPAL ══════════════ */}
-      <main className="flex-1 flex flex-col h-screen overflow-y-auto bg-gray-950/50">
+      {/* ══════════════ CONTENIDO PRINCIPAL (FLUIDO COMPLETO) ══════════════ */}
+      <main className="flex-1 flex flex-col h-screen overflow-y-auto bg-gray-950/50 w-full">
         
         {/* ══════════════ TAB DE PRODUCTOS ══════════════ */}
         {activeTab === 'productos' && (
-        <div className="p-4 md:p-8 space-y-6 md:space-y-8 max-w-7xl mx-auto w-full">
+        <div className="p-4 sm:p-6 md:p-8 xl:p-10 space-y-6 md:space-y-8 w-full">
           
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
             <div>
@@ -825,9 +825,9 @@ export default function AdminPanel({ onLogout }) {
           )}
 
           {/* Estadísticas */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full">
             {stats.map((stat, i) => (
-              <div key={i} className="bg-gray-900 border border-gray-800 rounded-2xl p-5 hover:border-gray-700 transition">
+              <div key={i} className="bg-gray-900 border border-gray-800 rounded-2xl p-5 hover:border-gray-700 transition shadow-md">
                 <div className={`w-10 h-10 rounded-xl ${stat.bg} flex items-center justify-center mb-3`}>
                   <stat.icon className={`w-5 h-5 ${stat.color}`} />
                 </div>
@@ -838,7 +838,7 @@ export default function AdminPanel({ onLogout }) {
           </div>
 
           {/* Buscador y filtro */}
-          <div className="bg-gray-900 border border-gray-800 p-2 rounded-2xl flex flex-col md:flex-row gap-2">
+          <div className="bg-gray-900 border border-gray-800 p-2 rounded-2xl flex flex-col md:flex-row gap-2 w-full">
             <div className="flex-1 relative">
               <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" />
               <input
@@ -849,7 +849,7 @@ export default function AdminPanel({ onLogout }) {
                 className="w-full bg-transparent text-white rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-yellow-400/50 text-sm"
               />
             </div>
-            <div className="w-full md:w-64 border-t md:border-t-0 md:border-l border-gray-800 p-1">
+            <div className="w-full md:w-72 border-t md:border-t-0 md:border-l border-gray-800 p-1">
               <select
                 value={filterCategory}
                 onChange={(e) => setFilterCategory(e.target.value)}
@@ -868,8 +868,8 @@ export default function AdminPanel({ onLogout }) {
             </div>
           </div>
 
-          {/* Grid de productos */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {/* Grid de productos adaptativo a todo el ancho */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 min-[2100px]:grid-cols-6 gap-5 w-full">
             {filteredProducts.length === 0 ? (
               <div className="col-span-full text-center py-16 bg-gray-900 border border-gray-800 rounded-3xl">
                 <ChefHat className="w-16 h-16 text-gray-700 mx-auto mb-4" />
@@ -949,7 +949,7 @@ export default function AdminPanel({ onLogout }) {
 
         {/* ══════════════ TAB DE CATEGORÍAS ══════════════ */}
         {activeTab === 'categorias' && (
-          <div className="p-4 md:p-8 space-y-6 md:space-y-8 max-w-7xl mx-auto w-full">
+          <div className="p-4 sm:p-6 md:p-8 xl:p-10 space-y-6 md:space-y-8 w-full">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
                 <h2 className="text-2xl md:text-3xl font-black text-white flex items-center gap-3">
@@ -974,7 +974,7 @@ export default function AdminPanel({ onLogout }) {
               </button>
             </div>
 
-            <div className="bg-gray-900 border border-gray-800 p-6 rounded-3xl shadow-xl">
+            <div className="bg-gray-900 border border-gray-800 p-6 rounded-3xl shadow-xl w-full">
               <h3 className="text-lg font-bold text-white mb-3 flex items-center gap-2">
                 <FolderPlus className="w-5 h-5 text-yellow-400" /> Crear Nueva Categoría
               </h3>
@@ -999,7 +999,7 @@ export default function AdminPanel({ onLogout }) {
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 w-full">
               {rawCategories.map((cat, idx) => {
                 const prodCount = products.filter(p => p.category === cat).length;
                 return (
@@ -1032,7 +1032,7 @@ export default function AdminPanel({ onLogout }) {
 
         {/* ══════════════ TAB DE PEDIDOS ══════════════ */}
         {activeTab === 'pedidos' && (
-          <div className="p-4 md:p-8 space-y-6 md:space-y-8 max-w-7xl mx-auto w-full">
+          <div className="p-4 sm:p-6 md:p-8 xl:p-10 space-y-6 md:space-y-8 w-full">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
                 <h1 className="text-2xl md:text-3xl font-black text-white flex items-center gap-3">
@@ -1066,7 +1066,7 @@ export default function AdminPanel({ onLogout }) {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 min-[1900px]:grid-cols-5 gap-5 w-full">
               {orders.length === 0 ? (
                 <div className="col-span-full text-center py-16 bg-gray-900 rounded-3xl border border-gray-800">
                   <ClipboardList className="w-16 h-16 text-gray-700 mx-auto mb-4" />
@@ -1183,7 +1183,7 @@ export default function AdminPanel({ onLogout }) {
 
         {/* ══════════════ TAB DE USUARIOS Y CLAVES ══════════════ */}
         {activeTab === 'usuarios' && (
-          <div className="p-4 md:p-8 space-y-6 md:space-y-8 max-w-7xl mx-auto w-full">
+          <div className="p-4 sm:p-6 md:p-8 xl:p-10 space-y-6 md:space-y-8 w-full">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
                 <h2 className="text-2xl md:text-3xl font-black text-white flex items-center gap-3">
@@ -1219,7 +1219,7 @@ export default function AdminPanel({ onLogout }) {
 
             {/* Tarjeta de Sesión Actual */}
             {currentUser && (
-              <div className="bg-gradient-to-r from-yellow-950/40 via-gray-900 to-gray-900 border border-yellow-500/30 p-6 rounded-3xl shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="bg-gradient-to-r from-yellow-950/40 via-gray-900 to-gray-900 border border-yellow-500/30 p-6 rounded-3xl shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full">
                 <div className="flex items-center gap-4">
                   <div className="w-14 h-14 rounded-2xl bg-yellow-400 text-gray-950 flex items-center justify-center font-black text-xl shadow-lg shadow-yellow-400/20">
                     {currentUser.nombre ? currentUser.nombre[0].toUpperCase() : 'A'}
@@ -1245,12 +1245,12 @@ export default function AdminPanel({ onLogout }) {
             )}
 
             {/* Grid de todos los usuarios registrados */}
-            <div>
+            <div className="w-full">
               <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
                 <Users className="w-5 h-5 text-yellow-400" /> Cuentas Registradas en el Sistema ({users.length})
               </h3>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 min-[1900px]:grid-cols-6 gap-4 w-full">
                 {users.map((u) => {
                   const isCurrent = currentUser && currentUser.id === u.id;
                   return (
@@ -1305,7 +1305,7 @@ export default function AdminPanel({ onLogout }) {
             </div>
 
             {/* Nota de ayuda */}
-            <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-5 text-xs text-gray-400 space-y-1.5">
+            <div className="bg-gray-900/50 border border-gray-800 rounded-2xl p-5 text-xs text-gray-400 space-y-1.5 w-full">
               <p><strong className="text-yellow-400">💡 ¿Cómo funciona la tabla de usuarios?</strong></p>
               <p>1. Los usuarios y contraseñas se leen de la pestaña <strong><code>usuarios</code></strong> en tu Google Sheet.</p>
               <p>2. Al cambiar la clave o crear un usuario desde este panel, se sincroniza en vivo con tu hoja de cálculo.</p>
