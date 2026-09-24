@@ -5,7 +5,7 @@ import {
   ExternalLink, X, RefreshCw, Eye, ClipboardList, Check,
   FolderPlus, Layers, Phone, MapPin, Clock, Bell, Volume2, RotateCcw,
   Users, KeyRound, UserPlus, ShieldCheck, UserCheck, Lock,
-  Sun, Moon, DollarSign, Filter, ShoppingBag
+  Sun, Moon, DollarSign, Edit3, Tag
 } from 'lucide-react';
 import { useAdminProducts } from '../hooks/useAdminProducts';
 import { useAdminUsers } from '../hooks/useAdminUsers';
@@ -23,6 +23,7 @@ export default function AdminPanel({ onLogout }) {
     updateProduct,
     deleteProduct,
     addCategory,
+    updateCategory,
     deleteCategory,
     refresh: refreshProducts
   } = useAdminProducts();
@@ -69,13 +70,15 @@ export default function AdminPanel({ onLogout }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('Todos');
   
-  // Filtros de Pedidos
+  // Filtros de Categorías y Pedidos
+  const [categorySearchQuery, setCategorySearchQuery] = useState('');
   const [orderSearchQuery, setOrderSearchQuery] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('all'); // 'all' | 'pending' | 'completed'
 
-  // Modales de confirmación de eliminación
+  // Modales de confirmación y edición
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [deleteCategoryConfirm, setDeleteCategoryConfirm] = useState(null);
+  const [editingCategory, setEditingCategory] = useState(null); // { oldName: string, newName: string }
   const [deleteUserConfirm, setDeleteUserConfirm] = useState(null);
   const [deleteOrderConfirm, setDeleteOrderConfirm] = useState(null);
 
@@ -262,20 +265,47 @@ export default function AdminPanel({ onLogout }) {
     }
   };
 
+  // ── GESTIÓN DE CATEGORÍAS (CRUD COMPLETO) ──
   const handleAddCategorySubmit = async (e) => {
     e.preventDefault();
     const name = newCategoryInput.trim();
     if (!name) return;
-    if (rawCategories.includes(name)) {
-      showToast('Esta categoría ya existe.', 'warning');
+    if (rawCategories.some(c => c.toLowerCase() === name.toLowerCase())) {
+      showToast(`La categoría "${name}" ya existe en el menú.`, 'warning');
       return;
     }
     try {
       await addCategory(name);
       setNewCategoryInput('');
-      showToast(`Categoría "${name}" agregada y guardada en Excel.`);
+      showToast(`Categoría "${name}" creada y guardada en Google Sheets.`);
     } catch (err) {
       showToast('Error al agregar categoría', 'error');
+    }
+  };
+
+  const handleEditCategorySubmit = async (e) => {
+    e.preventDefault();
+    if (!editingCategory) return;
+    const oldName = editingCategory.oldName.trim();
+    const newName = editingCategory.newName.trim();
+    if (!newName) {
+      showToast('El nombre de la categoría no puede estar vacío.', 'warning');
+      return;
+    }
+    if (oldName === newName) {
+      setEditingCategory(null);
+      return;
+    }
+    if (rawCategories.some(c => c.toLowerCase() === newName.toLowerCase() && c.toLowerCase() !== oldName.toLowerCase())) {
+      showToast(`Ya existe otra categoría llamada "${newName}".`, 'warning');
+      return;
+    }
+    try {
+      await updateCategory(oldName, newName);
+      showToast(`Categoría "${oldName}" renombrada a "${newName}" y actualizada en Excel.`);
+      setEditingCategory(null);
+    } catch (err) {
+      showToast('Error al actualizar categoría', 'error');
     }
   };
 
@@ -284,7 +314,7 @@ export default function AdminPanel({ onLogout }) {
       const catName = deleteCategoryConfirm;
       try {
         await deleteCategory(catName);
-        showToast(`Categoría "${catName}" eliminada de Excel.`);
+        showToast(`Categoría "${catName}" eliminada de Google Sheets.`);
       } catch (err) {
         showToast('Error al eliminar categoría', 'error');
       }
@@ -357,6 +387,11 @@ export default function AdminPanel({ onLogout }) {
       p.category.toLowerCase().includes(searchQuery.toLowerCase());
     const matchCategory = filterCategory === 'Todos' || p.category === filterCategory;
     return matchSearch && matchCategory;
+  });
+
+  // Filtrar categorías
+  const filteredCategories = rawCategories.filter(cat => {
+    return !categorySearchQuery.trim() || cat.toLowerCase().includes(categorySearchQuery.toLowerCase().trim());
   });
 
   // Filtrar pedidos
@@ -461,7 +496,7 @@ export default function AdminPanel({ onLogout }) {
           onClick={() => setDeleteCategoryConfirm(null)}
         >
           <div 
-            className={`${isDark ? 'bg-gray-900 border-red-900/60 text-white' : 'bg-white border-red-200 text-slate-900'} border rounded-3xl p-6 max-w-sm w-full shadow-2xl transition-all`}
+            className={`${isDark ? 'bg-gray-900 border-red-900/60 text-white' : 'bg-white border-red-200 text-slate-900'} border rounded-3xl p-6 max-w-md w-full shadow-2xl transition-all`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-3 mb-4">
@@ -470,11 +505,30 @@ export default function AdminPanel({ onLogout }) {
               </div>
               <div>
                 <h3 className="font-bold text-lg">¿Eliminar categoría?</h3>
-                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>Se eliminará de Google Sheets</p>
+                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>Gestión de catálogo</p>
               </div>
             </div>
+
+            <div className={`p-4 rounded-2xl mb-5 border ${isDark ? 'bg-gray-950 border-gray-800' : 'bg-slate-50 border-slate-200'}`}>
+              <div className="flex items-center justify-between">
+                <span className="font-black text-base text-amber-500">{deleteCategoryConfirm}</span>
+                <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${
+                  products.filter(p => p.category === deleteCategoryConfirm).length > 0
+                    ? 'bg-amber-400/20 text-amber-600 dark:text-amber-400'
+                    : 'bg-gray-500/10 text-gray-500'
+                }`}>
+                  {products.filter(p => p.category === deleteCategoryConfirm).length} producto(s)
+                </span>
+              </div>
+              {products.filter(p => p.category === deleteCategoryConfirm).length > 0 && (
+                <p className={`text-xs ${isDark ? 'text-amber-400/80' : 'text-amber-700'} mt-2`}>
+                  💡 Los productos vinculados a esta categoría se reasignarán automáticamente para evitar que se pierdan o queden huérfanos.
+                </p>
+              )}
+            </div>
+
             <p className={`text-sm mb-6 ${isDark ? 'text-gray-300' : 'text-slate-600'}`}>
-              ¿Estás seguro de eliminar la categoría <span className="font-bold text-amber-500">"{deleteCategoryConfirm}"</span>?
+              ¿Estás seguro de eliminar la categoría <span className="font-bold text-amber-500">"{deleteCategoryConfirm}"</span> de Google Sheets?
             </p>
             <div className="flex gap-3">
               <button 
@@ -485,16 +539,81 @@ export default function AdminPanel({ onLogout }) {
               </button>
               <button 
                 onClick={confirmDeleteCategory} 
-                className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 rounded-xl text-sm transition shadow-lg shadow-red-600/20"
+                className="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-2.5 rounded-xl text-sm transition shadow-lg shadow-red-600/20 flex items-center justify-center gap-1.5"
               >
-                Sí, eliminar
+                <Trash2 className="w-4 h-4" /> Sí, eliminar
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── MODAL: Confirmar eliminar pedido (NUEVO - Solicitado por el usuario) ── */}
+      {/* ── MODAL: Editar / Renombrar Categoría (NUEVO - Solicitado por el usuario) ── */}
+      {editingCategory && (
+        <div 
+          className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[70] flex items-center justify-center p-4"
+          onClick={() => setEditingCategory(null)}
+        >
+          <div 
+            className={`${isDark ? 'bg-gray-900 border-gray-800 text-white' : 'bg-white border-slate-200 text-slate-900'} border rounded-3xl p-6 max-w-md w-full shadow-2xl transition-all`}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className={`flex items-center justify-between mb-4 border-b ${isDark ? 'border-gray-800' : 'border-slate-200'} pb-3`}>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-amber-500/10 text-amber-500 rounded-xl flex items-center justify-center">
+                  <Edit3 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base">Editar Categoría</h3>
+                  <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>Renombrar en catálogo y Google Sheets</p>
+                </div>
+              </div>
+              <button onClick={() => setEditingCategory(null)} className="text-gray-400 hover:text-gray-600">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditCategorySubmit} className="space-y-4">
+              <div>
+                <label className={`block text-xs font-bold ${isDark ? 'text-gray-300' : 'text-slate-700'} mb-1.5`}>
+                  Nombre de la Categoría
+                </label>
+                <input
+                  type="text"
+                  value={editingCategory.newName}
+                  onChange={(e) => setEditingCategory({ ...editingCategory, newName: e.target.value })}
+                  placeholder="Nuevo nombre de la categoría"
+                  className={`w-full ${isDark ? 'bg-gray-800 border-gray-700 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'} border rounded-xl px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-amber-400 text-sm font-semibold`}
+                  required
+                  autoFocus
+                />
+                <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-slate-500'} mt-1.5`}>
+                  💡 Todos los productos que actualmente pertenecen a "{editingCategory.oldName}" se actualizarán automáticamente con este nuevo nombre.
+                </p>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingCategory(null)}
+                  className={`flex-1 ${isDark ? 'bg-gray-800 hover:bg-gray-700 text-gray-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'} font-bold py-2.5 rounded-xl text-sm transition`}
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={!editingCategory.newName.trim()}
+                  className="flex-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black py-2.5 rounded-xl text-sm transition shadow-lg shadow-amber-400/20 disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  <Check className="w-4 h-4" /> Guardar Cambios
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL: Confirmar eliminar pedido ── */}
       {deleteOrderConfirm && (
         <div 
           className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[70] flex items-center justify-center p-4"
@@ -1152,16 +1271,17 @@ export default function AdminPanel({ onLogout }) {
         </div>
         )}
 
-        {/* ══════════════ TAB DE CATEGORÍAS ══════════════ */}
+        {/* ══════════════ TAB DE CATEGORÍAS (CRUD COMPLETO Y MEJORADO) ══════════════ */}
         {activeTab === 'categorias' && (
           <div className="p-4 sm:p-6 md:p-8 xl:p-10 space-y-6 md:space-y-8 w-full max-w-[1920px] mx-auto">
+            {/* Cabecera */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
                 <h2 className={`text-2xl md:text-3xl font-black ${isDark ? 'text-white' : 'text-slate-900'} flex items-center gap-3`}>
                   <Layers className="text-amber-500" /> Categorías del Menú
                 </h2>
                 <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>
-                  Crea, organiza o elimina categorías sincronizadas directamente con Google Sheets (pestaña <code>categorias</code>).
+                  Crea, edita, renombra o elimina categorías sincronizadas directamente con Google Sheets (pestaña <code>categorias</code>).
                 </p>
               </div>
 
@@ -1179,8 +1299,9 @@ export default function AdminPanel({ onLogout }) {
               </button>
             </div>
 
+            {/* Formulario de Crear Categoría */}
             <div className={`${isDark ? 'bg-gray-900 border-gray-800' : 'bg-white border-slate-200 shadow-sm'} border p-6 rounded-3xl w-full`}>
-              <h3 className="text-lg font-bold mb-3 flex items-center gap-2">
+              <h3 className="text-base sm:text-lg font-black mb-3 flex items-center gap-2">
                 <FolderPlus className="w-5 h-5 text-amber-500" /> Crear Nueva Categoría
               </h3>
               <form onSubmit={handleAddCategorySubmit} className="flex flex-col sm:flex-row gap-3">
@@ -1188,8 +1309,8 @@ export default function AdminPanel({ onLogout }) {
                   type="text"
                   value={newCategoryInput}
                   onChange={(e) => setNewCategoryInput(e.target.value)}
-                  placeholder="Nombre de la nueva categoría (Ej. Bebidas, Desgranados, Combos...)"
-                  className={`flex-1 ${isDark ? 'bg-gray-800 border-gray-700 text-white placeholder-gray-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'} border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-amber-400 text-sm`}
+                  placeholder="Nombre de la nueva categoría (Ej. Bebidas, Desgranados, Combos Especiales...)"
+                  className={`flex-1 ${isDark ? 'bg-gray-800 border-gray-700 text-white placeholder-gray-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'} border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-amber-400 text-sm font-semibold`}
                 />
                 <button
                   type="submit"
@@ -1200,34 +1321,71 @@ export default function AdminPanel({ onLogout }) {
                 </button>
               </form>
               <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-slate-400'} mt-2`}>
-                Esta categoría aparecerá de inmediato en los filtros, en el formulario de creación de productos y en la página pública.
+                Esta categoría aparecerá de inmediato en los filtros de la carta, en el formulario de creación de productos y en la página web pública.
               </p>
             </div>
 
+            {/* Buscador de categorías si hay muchas */}
+            {rawCategories.length > 6 && (
+              <div className="relative max-w-md">
+                <Search className={`absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 ${isDark ? 'text-gray-500' : 'text-slate-400'}`} />
+                <input
+                  type="text"
+                  value={categorySearchQuery}
+                  onChange={(e) => setCategorySearchQuery(e.target.value)}
+                  placeholder="Buscar categoría..."
+                  className={`w-full ${isDark ? 'bg-gray-900 border-gray-800 text-white' : 'bg-white border-slate-200 text-slate-900'} border rounded-xl pl-10 pr-4 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-400`}
+                />
+              </div>
+            )}
+
+            {/* Grilla de Categorías con botones de Editar y Eliminar */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 w-full">
-              {rawCategories.map((cat, idx) => {
+              {filteredCategories.map((cat, idx) => {
                 const prodCount = products.filter(p => p.category === cat).length;
                 return (
-                  <div key={cat} className={`${isDark ? 'bg-gray-900 border-gray-800 hover:border-gray-700' : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'} border p-5 rounded-2xl flex items-center justify-between transition group`}>
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-xl ${isDark ? 'bg-amber-500/10 text-amber-400' : 'bg-amber-50 text-amber-600'} flex items-center justify-center font-bold`}>
-                        {idx + 1}
-                      </div>
-                      <div>
-                        <h4 className="font-bold text-base">{cat}</h4>
-                        <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>
-                          {prodCount} {prodCount === 1 ? 'producto' : 'productos'}
-                        </span>
+                  <div key={cat} className={`${isDark ? 'bg-gray-900 border-gray-800 hover:border-gray-700' : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'} border p-5 rounded-3xl flex flex-col justify-between transition group hover:shadow-md`}>
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-2xl ${isDark ? 'bg-amber-500/10 text-amber-400' : 'bg-amber-50 text-amber-600'} flex items-center justify-center font-black text-sm shrink-0`}>
+                          {idx + 1}
+                        </div>
+                        <div>
+                          <h4 className="font-black text-base leading-snug">{cat}</h4>
+                          <span className={`text-xs ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>
+                            {prodCount} {prodCount === 1 ? 'producto' : 'productos'}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => setDeleteCategoryConfirm(cat)}
-                      className={`p-2.5 ${isDark ? 'text-gray-500 hover:text-red-400 hover:bg-red-900/20' : 'text-slate-400 hover:text-red-600 hover:bg-red-50'} rounded-xl transition`}
-                      title={`Eliminar categoría "${cat}"`}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className={`flex items-center gap-2 pt-3 border-t ${isDark ? 'border-gray-800' : 'border-slate-100'}`}>
+                      {/* Botón Editar / Renombrar */}
+                      <button
+                        onClick={() => setEditingCategory({ oldName: cat, newName: cat })}
+                        className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-bold transition ${
+                          isDark 
+                            ? 'bg-blue-900/20 text-blue-400 hover:bg-blue-900/40' 
+                            : 'bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200'
+                        }`}
+                        title={`Editar / Renombrar categoría "${cat}"`}
+                      >
+                        <Pencil className="w-3.5 h-3.5" /> Editar
+                      </button>
+
+                      {/* Botón Eliminar */}
+                      <button
+                        onClick={() => setDeleteCategoryConfirm(cat)}
+                        className={`p-2 rounded-xl text-xs transition ${
+                          isDark 
+                            ? 'text-red-400 hover:bg-red-900/30' 
+                            : 'text-red-600 hover:bg-red-50 border border-red-200'
+                        }`}
+                        title={`Eliminar categoría "${cat}"`}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -1326,7 +1484,7 @@ export default function AdminPanel({ onLogout }) {
                   value={orderSearchQuery}
                   onChange={(e) => setOrderSearchQuery(e.target.value)}
                   placeholder="Buscar por #ID, cliente, celular o dirección..."
-                  className={`w-full ${isDark ? 'bg-gray-800 border-gray-700 text-white placeholder-gray-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'} border rounded-xl pl-10 pr-4 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-400`}
+                  className={`w-full ${isDark ? 'bg-gray-800 border-gray-700 text-white placeholder-gray-500' : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400'} border rounded-xl pl-10 pr-4 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 font-semibold`}
                 />
               </div>
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useSheetProducts, APPS_SCRIPT_URL, mergeCategories } from './useSheetProducts';
+import { useSheetProducts, APPS_SCRIPT_URL } from './useSheetProducts';
 
 export function useAdminProducts() {
   const {
@@ -85,6 +85,7 @@ export function useAdminProducts() {
     }
   };
 
+  // ── 1. CREAR CATEGORÍA ──
   const addCategory = async (categoryName) => {
     const trimmed = categoryName.trim();
     if (!trimmed || trimmed === 'Todos') return;
@@ -94,26 +95,80 @@ export function useAdminProducts() {
     const newRaw = [...currentRaw, trimmed];
     const fullList = ['Todos', ...newRaw];
     setCategories(fullList);
+    localStorage.setItem('trucco_categories_cache', JSON.stringify(fullList));
+    
     await syncCategoriesToSheet(newRaw);
   };
 
+  // ── 2. EDITAR / RENOMBRAR CATEGORÍA ──
+  const updateCategory = async (oldCategoryName, newCategoryName) => {
+    const trimmedOld = oldCategoryName.trim();
+    const trimmedNew = newCategoryName.trim();
+    if (!trimmedNew || trimmedNew === 'Todos' || trimmedOld === trimmedNew) return;
+
+    const currentRaw = categories.filter(c => c !== 'Todos');
+    const updatedRaw = currentRaw.map(c => c === trimmedOld ? trimmedNew : c);
+    if (!updatedRaw.includes(trimmedNew)) {
+      updatedRaw.push(trimmedNew);
+    }
+
+    // Actualizar también los productos que pertenecen a la categoría renombrada
+    const updatedProducts = products.map(p => {
+      if (p.category === trimmedOld) {
+        return { ...p, category: trimmedNew };
+      }
+      return p;
+    });
+
+    const fullList = ['Todos', ...updatedRaw];
+    setCategories(fullList);
+    setProducts(updatedProducts);
+
+    localStorage.setItem('trucco_categories_cache', JSON.stringify(fullList));
+    localStorage.setItem('trucco_sheet_cache', JSON.stringify(updatedProducts));
+
+    await Promise.all([
+      syncCategoriesToSheet(updatedRaw),
+      syncToSheet(updatedProducts)
+    ]);
+  };
+
+  // ── 3. ELIMINAR CATEGORÍA ──
   const deleteCategory = async (categoryName) => {
     const trimmed = categoryName.trim();
     if (!trimmed || trimmed === 'Todos') return;
     const currentRaw = categories.filter(c => c !== 'Todos');
     const newRaw = currentRaw.filter(c => c !== trimmed);
+    
+    // Si habían productos en la categoría eliminada, reasignarlos a otra categoría disponible o General
+    const fallbackCategory = newRaw.length > 0 ? newRaw[0] : 'General';
+    const updatedProducts = products.map(p => {
+      if (p.category === trimmed) {
+        return { ...p, category: fallbackCategory };
+      }
+      return p;
+    });
+
     const fullList = ['Todos', ...newRaw];
     setCategories(fullList);
-    await syncCategoriesToSheet(newRaw);
+    setProducts(updatedProducts);
+
+    localStorage.setItem('trucco_categories_cache', JSON.stringify(fullList));
+    localStorage.setItem('trucco_sheet_cache', JSON.stringify(updatedProducts));
+
+    await Promise.all([
+      syncCategoriesToSheet(newRaw),
+      syncToSheet(updatedProducts)
+    ]);
   };
 
+  // ── PRODUCTOS CRUD ──
   const addProduct = async (productData) => {
     const newId = Math.max(...products.map(p => p.id), 0) + 1;
     const newProduct = { ...productData, id: newId };
     const newProducts = [...products, newProduct];
     setProducts(newProducts);
     
-    // Si la categoría del nuevo producto no está en la lista de categorías, incluirla
     if (newProduct.category && !categories.includes(newProduct.category)) {
       const updatedCats = [...categories, newProduct.category];
       setCategories(updatedCats);
@@ -144,11 +199,11 @@ export function useAdminProducts() {
   };
 
   const resetToOriginal = async () => {
-    throw new Error("Resetting to original not supported with Google Sheets. Please edit the Sheet directly.");
+    throw new Error("Resetting to original not supported with Google Sheets.");
   };
 
   const exportProducts = () => {
-    alert("Exportar ya no es necesario. Los cambios se guardan directamente en Google Sheets.");
+    alert("Los cambios se guardan directamente en Google Sheets.");
   };
 
   return {
@@ -161,6 +216,7 @@ export function useAdminProducts() {
     updateProduct,
     deleteProduct,
     addCategory,
+    updateCategory,
     deleteCategory,
     resetToOriginal,
     exportProducts,
