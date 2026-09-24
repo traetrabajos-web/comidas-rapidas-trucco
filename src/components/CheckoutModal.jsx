@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X, Send, CheckCircle, ShieldAlert, Loader2, AlertCircle, FileText, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { WHATSAPP_NUMBER } from '../data/products';
+import { APPS_SCRIPT_URL } from '../hooks/useSheetProducts';
 
 const COOLDOWN_SECONDS = 45; // 45 segundos de espera entre pedidos
 
@@ -198,24 +199,42 @@ export default function CheckoutModal({ isOpen, onClose, cart, onConfirmOrder })
       localStorage.setItem('trucco_last_order_timestamp', Date.now().toString());
       setCooldownRemaining(COOLDOWN_SECONDS);
 
-      // --- NUEVO: Guardar en el historial local del dashboard ---
+      // --- Guardar en Google Sheets (Hoja de pedidos) ---
+      const orderData = {
+        id: String(orderId),
+        date: dateFormatted,
+        time: timeFormatted,
+        name: cleanName,
+        phone: cleanPhone,
+        orderType: formData.orderType,
+        address: formData.orderType === 'domicilio' ? (formData.address || '').trim() : '',
+        notes: formData.notes ? formData.notes.trim() : '',
+        itemsSummary: cart.map(item => {
+          const variantText = item.variantLabel && item.variantLabel !== item.name ? ` (${item.variantLabel})` : '';
+          return `${item.quantity}x ${item.name}${variantText}`;
+        }).join(', '),
+        items: cart,
+        total,
+        status: 'pending'
+      };
+
+      try {
+        await fetch(APPS_SCRIPT_URL, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+          body: JSON.stringify({ action: 'saveOrder', order: orderData })
+        });
+      } catch (sheetErr) {
+        console.warn('No se pudo enviar el pedido a Google Sheets:', sheetErr);
+      }
+
+      // Guardar también en el almacenamiento local como respaldo
       try {
         const historyStr = localStorage.getItem('trucco_order_history');
         const history = historyStr ? JSON.parse(historyStr) : [];
-        history.push({
-          id: orderId,
-          date: dateFormatted,
-          time: timeFormatted,
-          name: cleanName,
-          phone: cleanPhone,
-          orderType: formData.orderType,
-          address: formData.address,
-          notes: formData.notes,
-          items: cart,
-          total,
-          status: 'pending' // pending, completed
-        });
-        localStorage.setItem('trucco_order_history', JSON.stringify(history));
+        history.unshift(orderData);
+        localStorage.setItem('trucco_order_history', JSON.stringify(history.slice(0, 100)));
       } catch (err) {
         console.error("Error guardando historial local", err);
       }

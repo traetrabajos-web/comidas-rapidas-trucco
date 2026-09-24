@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSheetProducts, APPS_SCRIPT_URL } from './useSheetProducts';
 
 export function useAdminProducts() {
@@ -6,6 +6,15 @@ export function useAdminProducts() {
 
   const [products, setProducts] = useState(sheetProducts);
   const [categories, setCategories] = useState(sheetCategories);
+  const [orders, setOrders] = useState(() => {
+    try {
+      const saved = localStorage.getItem('trucco_order_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [loadingOrders, setLoadingOrders] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState(null);
 
@@ -37,13 +46,11 @@ export function useAdminProducts() {
 
   // ─── Sync categorías al Sheet ────────────────────────────
   const syncCategoriesToSheet = async (newRawCategories) => {
-    // Actualizar estado y caché LOCAL de inmediato (UX instantánea)
     const withTodos = ['Todos', ...newRawCategories];
     setCategories(withTodos);
     localStorage.setItem('trucco_cats_cache', JSON.stringify(withTodos));
     localStorage.setItem('trucco_cats_cache_time', String(Date.now()));
 
-    // Enviar al Apps Script en segundo plano
     setIsSaving(true);
     setSaveError(null);
     try {
@@ -56,7 +63,6 @@ export function useAdminProducts() {
     } catch (err) {
       console.error('Error guardando categorías en Google Sheets:', err);
       setSaveError(err.message);
-      // NO revertimos el estado local — el caché ya quedó guardado
     } finally {
       setIsSaving(false);
     }
@@ -105,13 +111,11 @@ export function useAdminProducts() {
       throw new Error('Ya existe una categoría con ese nombre');
     }
     const newRaw = raw.map(c => c === oldNombre ? newNombre.trim() : c);
-    // Actualizar también los productos que usen esa categoría
     const updatedProducts = products.map(p =>
       p.category === oldNombre ? { ...p, category: newNombre.trim() } : p
     );
     setProducts(updatedProducts);
     localStorage.setItem('trucco_sheet_cache', JSON.stringify(updatedProducts));
-    // Sync ambos en paralelo
     await Promise.all([
       syncCategoriesToSheet(newRaw),
       syncToSheet(updatedProducts),
@@ -123,17 +127,68 @@ export function useAdminProducts() {
     await syncCategoriesToSheet(newRaw);
   };
 
-  const resetToOriginal = async () => {
-    throw new Error('Resetting to original not supported. Edit the Sheet directly.');
+  // ─── GESTIÓN DE PEDIDOS DESDE GOOGLE SHEETS ──────────────
+  const fetchOrders = useCallback(async () => {
+    try {
+      setLoadingOrders(true);
+      const resp = await fetch(`${APPS_SCRIPT_URL}?action=getOrders&t=${Date.now()}`);
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data && Array.isArray(data.orders)) {
+          setOrders(data.orders);
+          localStorage.setItem('trucco_order_history', JSON.stringify(data.orders));
+          return data.orders;
+        }
+      }
+    } catch (err) {
+      console.warn('No se pudieron obtener pedidos del servidor, usando copia local:', err);
+    } finally {
+      setLoadingOrders(false);
+    }
+    return null;
+  }, []);
+
+  const updateOrderStatus = async (orderId, newStatus) => {
+    const stringId = String(orderId);
+    const updated = orders.map(o => String(o.id) === stringId ? { ...o, status: newStatus } : o);
+    setOrders(updated);
+    localStorage.setItem('trucco_order_history', JSON.stringify(updated));
+
+    try {
+      await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'updateOrderStatus', orderId: stringId, status: newStatus })
+      });
+    } catch (err) {
+      console.error('Error actualizando estado del pedido en Sheet:', err);
+    }
   };
 
-  const exportProducts = () => {
-    alert('Los cambios se guardan directamente en Google Sheets.');
+  const deleteOrder = async (orderId) => {
+    const stringId = String(orderId);
+    const updated = orders.filter(o => String(o.id) !== stringId);
+    setOrders(updated);
+    localStorage.setItem('trucco_order_history', JSON.stringify(updated));
+
+    try {
+      await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'deleteOrder', orderId: stringId })
+      });
+    } catch (err) {
+      console.error('Error eliminando pedido en Sheet:', err);
+    }
   };
 
   return {
     products,
     categories,
+    orders,
+    loadingOrders,
     loading: loadingSheet || isSaving,
     isSaving,
     error: saveError,
@@ -143,8 +198,9 @@ export function useAdminProducts() {
     addCategory,
     updateCategory,
     deleteCategory,
-    resetToOriginal,
-    exportProducts,
+    fetchOrders,
+    updateOrderStatus,
+    deleteOrder,
     refresh,
     refreshCategories,
   };

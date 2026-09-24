@@ -1,22 +1,56 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   LogOut, Plus, Pencil, Trash2,
   ChefHat, Search, Package, AlertTriangle, CheckCircle,
-  ExternalLink, X, RefreshCw, Eye, ClipboardList, Check, Tag
+  ExternalLink, X, RefreshCw, Eye, ClipboardList, Check, Tag,
+  Volume2, VolumeX, Phone, MessageCircle, MapPin, Bell, Clock,
+  FileText, Sparkles, AlertCircle
 } from 'lucide-react';
 import { useAdminProducts } from '../hooks/useAdminProducts';
 import AdminProductForm from './AdminProductForm';
 
+// ─── Generador de sonido sintetizado para alertas de nuevos pedidos ───
+function playOrderChime() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+
+    const playTone = (freq, start, duration) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, start);
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.35, start + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + duration);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(start);
+      osc.stop(start + duration);
+    };
+
+    // Melodía tipo campanita (Do5 -> Mi5 -> Sol5 -> Do6)
+    playTone(523.25, now, 0.25);
+    playTone(659.25, now + 0.12, 0.3);
+    playTone(783.99, now + 0.24, 0.35);
+    playTone(1046.50, now + 0.38, 0.6);
+  } catch (e) {
+    console.warn('Audio notification error:', e);
+  }
+}
+
 export default function AdminPanel({ onLogout }) {
   const {
-    products, categories, loading, isSaving, error,
+    products, categories, orders, loadingOrders, loading, isSaving, error,
     addProduct, updateProduct, deleteProduct,
     addCategory, updateCategory, deleteCategory,
+    fetchOrders, updateOrderStatus, deleteOrder,
     refresh, refreshCategories
   } = useAdminProducts();
 
   const [activeTab, setActiveTab] = useState('productos'); // 'productos' | 'categorias' | 'pedidos'
-  const [orders, setOrders] = useState([]);
   const [view, setView] = useState('list'); // 'list' | 'form'
   const [editingProduct, setEditingProduct] = useState(null);
   const [viewingProduct, setViewingProduct] = useState(null);
@@ -27,43 +61,96 @@ export default function AdminPanel({ onLogout }) {
 
   // ─── Estado para CRUD de Categorías ───────────────
   const [catModalOpen, setCatModalOpen] = useState(false);
-  const [editingCategory, setEditingCategory] = useState(null); // string o null
+  const [editingCategory, setEditingCategory] = useState(null);
   const [catName, setCatName] = useState('');
   const [deleteCatConfirm, setDeleteCatConfirm] = useState(null);
 
+  // ─── Estado para Gestión y Notificaciones de Pedidos ───
+  const [orderFilter, setOrderFilter] = useState('todos'); // 'todos' | 'pending' | 'completed' | 'domicilio' | 'recoger'
+  const [orderSearch, setOrderSearch] = useState('');
+  const [deleteOrderConfirm, setDeleteOrderConfirm] = useState(null);
+  const [soundEnabled, setSoundEnabled] = useState(() => {
+    const saved = localStorage.getItem('trucco_sound_enabled');
+    return saved !== null ? saved === 'true' : true;
+  });
+  const [newOrderAlert, setNewOrderAlert] = useState(null); // Último pedido entrante para banner
+  const prevOrderIdsRef = useRef(new Set());
+  const isFirstLoadRef = useRef(true);
+
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 3500);
+    setTimeout(() => setToast(null), 4000);
   };
 
   useEffect(() => {
     if (error) showToast(`Error al sincronizar: ${error}`, 'error');
   }, [error]);
 
+  const toggleSound = () => {
+    const next = !soundEnabled;
+    setSoundEnabled(next);
+    localStorage.setItem('trucco_sound_enabled', String(next));
+    if (next) {
+      playOrderChime();
+      showToast('🔔 Sonido de notificaciones activado', 'success');
+    } else {
+      showToast('🔕 Sonido de notificaciones silenciado', 'info');
+    }
+  };
+
+  // ─── Sincronización en vivo y sondeo de pedidos cada 12 segundos ───
   useEffect(() => {
-    if (activeTab === 'pedidos') loadOrders();
-  }, [activeTab]);
+    const syncOrders = async () => {
+      const serverOrders = await fetchOrders();
+      if (serverOrders && Array.isArray(serverOrders)) {
+        const currentIds = new Set(serverOrders.map(o => String(o.id)));
+        
+        if (!isFirstLoadRef.current) {
+          // Detectar si hay nuevos pedidos que no estaban en la lista anterior
+          const newlyArrived = serverOrders.filter(
+            o => !prevOrderIdsRef.current.has(String(o.id)) && o.status === 'pending'
+          );
 
-  const loadOrders = () => {
-    try {
-      const historyStr = localStorage.getItem('trucco_order_history');
-      if (historyStr) setOrders(JSON.parse(historyStr).reverse());
-      else setOrders([]);
-    } catch (e) { console.error(e); }
-  };
+          if (newlyArrived.length > 0) {
+            const newest = newlyArrived[0];
+            if (soundEnabled) playOrderChime();
+            
+            setNewOrderAlert(newest);
+            showToast(`🔔 ¡NUEVO PEDIDO! De ${newest.name} por $${newest.total.toLocaleString('es-CO')}`, 'success');
 
-  const markOrderCompleted = (orderId) => {
-    const newOrders = orders.map(o => o.id === orderId ? { ...o, status: 'completed' } : o);
-    setOrders(newOrders);
-    localStorage.setItem('trucco_order_history', JSON.stringify(newOrders.reverse()));
-    loadOrders();
-  };
+            // Notificación del navegador si está permitida
+            if ('Notification' in window && Notification.permission === 'granted') {
+              try {
+                new Notification('🍔 Comidas Rápidas Trucco - ¡Nuevo Pedido!', {
+                  body: `${newest.name} (${newest.orderType === 'domicilio' ? '🛵 Domicilio' : '🏪 Recoger'}) - $${newest.total.toLocaleString('es-CO')}`,
+                  icon: '/logo.png'
+                });
+              } catch (e) {}
+            }
+          }
+        }
 
-  const deleteOrder = (orderId) => {
-    const newOrders = orders.filter(o => o.id !== orderId);
-    setOrders(newOrders);
-    localStorage.setItem('trucco_order_history', JSON.stringify(newOrders.reverse()));
-    loadOrders();
+        prevOrderIdsRef.current = currentIds;
+        isFirstLoadRef.current = false;
+      }
+    };
+
+    // Carga inicial inmediata
+    syncOrders();
+
+    // Sondeo periódico cada 12 segundos
+    const interval = setInterval(syncOrders, 12000);
+    return () => clearInterval(interval);
+  }, [fetchOrders, soundEnabled]);
+
+  // Solicitar permiso de notificaciones del navegador
+  const requestNotificationPermission = async () => {
+    if ('Notification' in window) {
+      const perm = await Notification.requestPermission();
+      if (perm === 'granted') {
+        showToast('✅ Notificaciones de escritorio activadas', 'success');
+      }
+    }
   };
 
   // ─── Handlers Productos ────────────────────────────
@@ -132,6 +219,24 @@ export default function AdminPanel({ onLogout }) {
     } catch (e) { showToast('Error al eliminar categoría', 'error'); }
   };
 
+  // ─── Handlers Pedidos ──────────────────────────────
+  const handleToggleStatus = async (order) => {
+    const nextStatus = order.status === 'completed' ? 'pending' : 'completed';
+    await updateOrderStatus(order.id, nextStatus);
+    showToast(nextStatus === 'completed' ? `Pedido #${order.id} marcado como COMPLETADO` : `Pedido #${order.id} reabierto como PENDIENTE`);
+  };
+
+  const confirmDeleteOrder = async () => {
+    if (!deleteOrderConfirm) return;
+    try {
+      await deleteOrder(deleteOrderConfirm);
+      showToast(`Pedido eliminado correctamente.`);
+      setDeleteOrderConfirm(null);
+    } catch (e) {
+      showToast('Error al eliminar pedido', 'error');
+    }
+  };
+
   const rawCategories = categories.filter(c => c !== 'Todos');
 
   const filteredProducts = products.filter((p) => {
@@ -140,6 +245,33 @@ export default function AdminPanel({ onLogout }) {
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       p.description.toLowerCase().includes(searchQuery.toLowerCase());
     return matchCategory && matchQuery;
+  });
+
+  const pendingOrdersCount = orders.filter(o => o.status === 'pending').length;
+  const completedOrdersCount = orders.filter(o => o.status === 'completed').length;
+  const domicilioCount = orders.filter(o => o.orderType === 'domicilio').length;
+  const recogerCount = orders.filter(o => o.orderType === 'recoger').length;
+  const totalFacturado = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+
+  const filteredOrders = orders.filter((order) => {
+    // Filtro por tab/estado
+    if (orderFilter === 'pending' && order.status !== 'pending') return false;
+    if (orderFilter === 'completed' && order.status !== 'completed') return false;
+    if (orderFilter === 'domicilio' && order.orderType !== 'domicilio') return false;
+    if (orderFilter === 'recoger' && order.orderType !== 'recoger') return false;
+
+    // Filtro por buscador
+    if (orderSearch.trim()) {
+      const q = orderSearch.toLowerCase();
+      const matchName = String(order.name || '').toLowerCase().includes(q);
+      const matchPhone = String(order.phone || '').toLowerCase().includes(q);
+      const matchAddress = String(order.address || '').toLowerCase().includes(q);
+      const matchNotes = String(order.notes || '').toLowerCase().includes(q);
+      const matchItems = String(order.itemsSummary || '').toLowerCase().includes(q);
+      const matchId = String(order.id || '').toLowerCase().includes(q);
+      return matchName || matchPhone || matchAddress || matchNotes || matchItems || matchId;
+    }
+    return true;
   });
 
   const stats = [
@@ -176,10 +308,54 @@ export default function AdminPanel({ onLogout }) {
 
       {/* ── Toast ── */}
       {toast && (
-        <div className={`fixed top-4 right-4 z-50 flex items-center gap-3 px-5 py-3 rounded-xl shadow-2xl transition-all ${toast.type === 'success' ? 'bg-green-800 border border-green-600' : 'bg-yellow-800 border border-yellow-600'}`}>
+        <div className={`fixed top-4 right-4 z-50 flex items-center gap-3 px-5 py-3 rounded-xl shadow-2xl transition-all ${toast.type === 'success' ? 'bg-green-800 border border-green-600' : toast.type === 'error' ? 'bg-red-800 border border-red-600' : 'bg-yellow-800 border border-yellow-600'}`}>
           {toast.type === 'success' ? <CheckCircle className="w-5 h-5 text-green-300 flex-shrink-0" /> : <AlertTriangle className="w-5 h-5 text-yellow-300 flex-shrink-0" />}
           <span className="text-sm text-white max-w-xs">{toast.message}</span>
           <button onClick={() => setToast(null)}><X className="w-4 h-4 text-white/60 hover:text-white" /></button>
+        </div>
+      )}
+
+      {/* ── Banner flotante de Nuevo Pedido en vivo ── */}
+      {newOrderAlert && (
+        <div className="fixed bottom-6 right-6 z-[80] max-w-md bg-gradient-to-r from-yellow-500 to-amber-500 text-gray-950 p-5 rounded-3xl shadow-2xl border-2 border-white/40 flex items-start gap-4 animate-bounce">
+          <div className="w-12 h-12 bg-black/20 rounded-2xl flex items-center justify-center shrink-0">
+            <Bell className="w-7 h-7 text-gray-950 animate-pulse" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs uppercase font-black tracking-wider bg-black/20 px-2.5 py-0.5 rounded-full">
+                ¡NUEVO PEDIDO RECIBIDO!
+              </span>
+              <button onClick={() => setNewOrderAlert(null)} className="p-1 hover:bg-black/10 rounded-full">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <h4 className="font-black text-lg mt-1 truncate">{newOrderAlert.name}</h4>
+            <p className="text-xs font-semibold text-gray-900/90 mt-0.5">
+              {newOrderAlert.orderType === 'domicilio' ? '🛵 Domicilio' : '🏪 Recoger'} • ${newOrderAlert.total.toLocaleString('es-CO')}
+            </p>
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={() => {
+                  setActiveTab('pedidos');
+                  setNewOrderAlert(null);
+                }}
+                className="bg-black text-white text-xs font-black px-4 py-2 rounded-xl hover:bg-gray-900 transition flex items-center gap-1.5"
+              >
+                <ClipboardList className="w-3.5 h-3.5" /> Ver en Pedidos
+              </button>
+              {newOrderAlert.phone && (
+                <a
+                  href={`https://wa.me/57${newOrderAlert.phone.replace(/\D/g, '')}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="bg-green-600 text-white text-xs font-black px-3 py-2 rounded-xl hover:bg-green-500 transition flex items-center gap-1"
+                >
+                  <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
+                </a>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
@@ -226,6 +402,30 @@ export default function AdminPanel({ onLogout }) {
             <div className="flex gap-3">
               <button onClick={() => setDeleteCatConfirm(null)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 py-2.5 rounded-xl text-sm transition">Cancelar</button>
               <button onClick={confirmDeleteCat} className="flex-1 bg-red-600 hover:bg-red-500 text-white font-semibold py-2.5 rounded-xl text-sm transition">Sí, eliminar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal confirmar eliminar pedido ── */}
+      {deleteOrderConfirm && (
+        <div className="fixed inset-0 bg-black/70 z-[60] flex items-center justify-center p-4" onClick={() => setDeleteOrderConfirm(null)}>
+          <div className="bg-gray-900 border border-red-800 rounded-2xl p-6 max-w-sm w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 bg-red-900/50 rounded-full flex items-center justify-center">
+                <Trash2 className="w-5 h-5 text-red-400" />
+              </div>
+              <div>
+                <h3 className="font-bold text-white">¿Eliminar pedido?</h3>
+                <p className="text-xs text-gray-400">Se eliminará del historial y de Google Sheets</p>
+              </div>
+            </div>
+            <p className="text-gray-300 text-sm mb-5">
+              ¿Estás seguro de eliminar el pedido <span className="font-semibold text-white">#{deleteOrderConfirm}</span>?
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteOrderConfirm(null)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 py-2.5 rounded-xl text-sm transition">Cancelar</button>
+              <button onClick={confirmDeleteOrder} className="flex-1 bg-red-600 hover:bg-red-500 text-white font-semibold py-2.5 rounded-xl text-sm transition">Sí, eliminar</button>
             </div>
           </div>
         </div>
@@ -320,23 +520,31 @@ export default function AdminPanel({ onLogout }) {
         <div className="flex-1 py-6 px-4 space-y-2">
           <button
             onClick={() => setActiveTab('productos')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition ${activeTab === 'productos' ? 'bg-yellow-400/10 text-yellow-400' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition ${activeTab === 'productos' ? 'bg-yellow-400/10 text-yellow-400 font-bold' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}
           >
             <Package className="w-5 h-5" /> Productos
           </button>
 
           <button
             onClick={() => setActiveTab('categorias')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition ${activeTab === 'categorias' ? 'bg-yellow-400/10 text-yellow-400' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition ${activeTab === 'categorias' ? 'bg-yellow-400/10 text-yellow-400 font-bold' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}
           >
             <Tag className="w-5 h-5" /> Categorías
           </button>
 
           <button
             onClick={() => setActiveTab('pedidos')}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition ${activeTab === 'pedidos' ? 'bg-yellow-400/10 text-yellow-400' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}
+            className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-medium transition ${activeTab === 'pedidos' ? 'bg-yellow-400/10 text-yellow-400 font-bold' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}
           >
-            <ClipboardList className="w-5 h-5" /> Historial de Pedidos
+            <div className="flex items-center gap-3">
+              <ClipboardList className="w-5 h-5" />
+              <span>Pedidos</span>
+            </div>
+            {pendingOrdersCount > 0 && (
+              <span className="bg-yellow-400 text-gray-950 font-black text-xs px-2 py-0.5 rounded-full animate-pulse shadow-md">
+                {pendingOrdersCount}
+              </span>
+            )}
           </button>
 
           <a href="/" target="_blank" rel="noreferrer" className="w-full flex items-center gap-3 px-4 py-3 text-gray-400 hover:text-white hover:bg-gray-800 rounded-xl font-medium transition mt-4 border-t border-gray-800 pt-4">
@@ -344,7 +552,15 @@ export default function AdminPanel({ onLogout }) {
           </a>
         </div>
 
-        <div className="p-4 border-t border-gray-800">
+        <div className="p-4 border-t border-gray-800 space-y-2">
+          <button
+            onClick={toggleSound}
+            className={`w-full flex items-center justify-center gap-2 px-3 py-2 text-xs rounded-xl transition ${soundEnabled ? 'bg-yellow-400/10 text-yellow-400 border border-yellow-400/20' : 'bg-gray-800 text-gray-400'}`}
+          >
+            {soundEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+            <span>{soundEnabled ? 'Sonido: Activado' : 'Sonido: Silenciado'}</span>
+          </button>
+
           <button onClick={onLogout} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded-xl transition font-medium">
             <LogOut className="w-4 h-4" /> Cerrar sesión
           </button>
@@ -358,12 +574,24 @@ export default function AdminPanel({ onLogout }) {
             <img src="/logo.png" alt="Trucco" className="h-8 w-auto object-contain drop-shadow-lg" />
             <h1 className="font-bold text-white text-sm">Admin Panel</h1>
           </div>
-          <button onClick={onLogout} className="text-red-400 p-2"><LogOut className="w-5 h-5" /></button>
+          <div className="flex items-center gap-2">
+            <button onClick={toggleSound} className="p-2 text-gray-400 hover:text-yellow-400">
+              {soundEnabled ? <Volume2 className="w-5 h-5 text-yellow-400" /> : <VolumeX className="w-5 h-5" />}
+            </button>
+            <button onClick={onLogout} className="text-red-400 p-2"><LogOut className="w-5 h-5" /></button>
+          </div>
         </div>
         <div className="flex">
           <button onClick={() => setActiveTab('productos')} className={`flex-1 py-3 text-xs font-bold border-b-2 transition ${activeTab === 'productos' ? 'border-yellow-400 text-yellow-400' : 'border-transparent text-gray-500'}`}>Productos</button>
           <button onClick={() => setActiveTab('categorias')} className={`flex-1 py-3 text-xs font-bold border-b-2 transition ${activeTab === 'categorias' ? 'border-yellow-400 text-yellow-400' : 'border-transparent text-gray-500'}`}>Categorías</button>
-          <button onClick={() => setActiveTab('pedidos')} className={`flex-1 py-3 text-xs font-bold border-b-2 transition ${activeTab === 'pedidos' ? 'border-yellow-400 text-yellow-400' : 'border-transparent text-gray-500'}`}>Pedidos</button>
+          <button onClick={() => setActiveTab('pedidos')} className={`flex-1 py-3 text-xs font-bold border-b-2 transition relative ${activeTab === 'pedidos' ? 'border-yellow-400 text-yellow-400' : 'border-transparent text-gray-500'}`}>
+            <span>Pedidos</span>
+            {pendingOrdersCount > 0 && (
+              <span className="ml-1.5 bg-yellow-400 text-gray-950 font-black text-[10px] px-1.5 py-0.5 rounded-full">
+                {pendingOrdersCount}
+              </span>
+            )}
+          </button>
         </div>
       </div>
 
@@ -501,18 +729,6 @@ export default function AdminPanel({ onLogout }) {
                 ))
               )}
             </div>
-
-            <div className="bg-gradient-to-r from-green-900/30 to-emerald-900/20 border border-green-800/50 rounded-2xl p-5 md:p-6 mt-8 shadow-lg">
-              <h3 className="text-base font-bold text-green-400 mb-2 flex items-center gap-2">
-                <RefreshCw className="w-5 h-5" /> Sincronización Automática
-              </h3>
-              <p className="text-sm text-green-200/80 mb-4">Cualquier cambio que realices en el panel se enviará a tu hoja de cálculo.</p>
-              <ul className="text-sm text-green-200/70 space-y-2 list-disc list-inside ml-2">
-                <li>El indicador de <strong>"Guardando..."</strong> aparecerá cuando guardes.</li>
-                <li>Tu hoja de Google Sheets es la fuente oficial de información.</li>
-                <li>Los clientes verán los cambios actualizados en máximo 5 minutos en el menú principal.</li>
-              </ul>
-            </div>
           </div>
         )}
 
@@ -615,7 +831,6 @@ export default function AdminPanel({ onLogout }) {
                       className={`relative bg-gradient-to-br ${pal.bg} border ${pal.border} rounded-3xl overflow-hidden hover:scale-[1.02] hover:shadow-2xl hover:shadow-black/40 transition-all duration-200`}
                     >
                       <div className="p-6">
-                        {/* Ícono + badge contador */}
                         <div className="flex items-start justify-between mb-5">
                           <div className={`w-14 h-14 rounded-2xl ${pal.icon} flex items-center justify-center shadow-md`}>
                             <Tag className="w-7 h-7" />
@@ -625,10 +840,8 @@ export default function AdminPanel({ onLogout }) {
                           </span>
                         </div>
 
-                        {/* Nombre de la categoría */}
                         <h3 className="text-xl font-black text-white mb-4 leading-tight">{cat}</h3>
 
-                        {/* Barra de progreso */}
                         {products.length > 0 && (
                           <div className="mb-5">
                             <div className="flex justify-between text-xs text-gray-500 mb-1.5">
@@ -644,7 +857,6 @@ export default function AdminPanel({ onLogout }) {
                           </div>
                         )}
 
-                        {/* Botones de acción */}
                         <div className="grid grid-cols-2 gap-2 pt-4 border-t border-white/10">
                           <button
                             onClick={() => openEditCat(cat)}
@@ -664,7 +876,6 @@ export default function AdminPanel({ onLogout }) {
                   );
                 })}
 
-                {/* Tarjeta "Agregar nueva" */}
                 <button
                   onClick={openNewCat}
                   className="border-2 border-dashed border-gray-700 hover:border-yellow-400/60 rounded-3xl p-6 flex flex-col items-center justify-center gap-3 text-gray-600 hover:text-yellow-400 transition-all duration-200 min-h-[220px] group"
@@ -676,86 +887,329 @@ export default function AdminPanel({ onLogout }) {
                 </button>
               </div>
             )}
-
-            {/* Nota Apps Script */}
-            <div className="bg-orange-900/20 border border-orange-800/40 rounded-2xl p-4 text-sm text-orange-200/80 flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-orange-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <strong className="text-orange-300">Para sincronizar con Google Sheets:</strong> Actualiza el Apps Script con el código nuevo que soporta <code className="bg-orange-900/30 px-1 rounded">saveCategories</code>. Los cambios se guardan localmente de inmediato, pero para que queden en el Excel necesitas actualizar el script.
-              </div>
-            </div>
           </div>
         )}
 
-
-
-        {/* ══════════════ TAB PEDIDOS ══════════════ */}
+        {/* ══════════════ TAB PEDIDOS (EN VIVO CON GOOGLE SHEETS) ══════════════ */}
         {activeTab === 'pedidos' && (
           <div className="p-4 md:p-8 space-y-6 md:space-y-8 max-w-5xl mx-auto w-full">
-            <div className="flex flex-col gap-2">
-              <h1 className="text-2xl md:text-3xl font-black text-white flex items-center gap-3">Historial de Pedidos</h1>
-              <p className="text-gray-400 text-sm">Pedidos generados desde el carrito de compras</p>
+
+            {/* Header de Pedidos */}
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-3">
+                  <h2 className="text-2xl md:text-3xl font-black text-white">Gestión de Pedidos en Vivo</h2>
+                  <span className="flex items-center gap-1 text-[11px] font-bold bg-green-500/20 text-green-400 border border-green-500/30 px-2.5 py-1 rounded-full animate-pulse">
+                    <span className="w-2 h-2 rounded-full bg-green-400 animate-ping" /> Sincronizado
+                  </span>
+                </div>
+                <p className="text-gray-400 text-sm mt-1">
+                  Pedidos registrados desde el carrito de compras y guardados automáticamente en Google Sheets
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={toggleSound}
+                  className={`p-3 rounded-xl transition flex items-center gap-2 font-bold text-sm ${soundEnabled ? 'bg-yellow-400/10 text-yellow-400 border border-yellow-400/30 hover:bg-yellow-400/20' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
+                  title={soundEnabled ? 'Silenciar sonidos de nuevos pedidos' : 'Activar sonido de nuevos pedidos'}
+                >
+                  {soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+                  <span className="hidden sm:inline">{soundEnabled ? 'Sonido ON' : 'Sonido OFF'}</span>
+                </button>
+
+                <button
+                  onClick={requestNotificationPermission}
+                  className="bg-gray-800 hover:bg-gray-700 text-gray-300 font-bold p-3 rounded-xl transition flex items-center gap-2 text-sm"
+                  title="Activar alertas de escritorio en tu computadora o teléfono"
+                >
+                  <Bell className="w-5 h-5" />
+                  <span className="hidden sm:inline">Alertas</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    fetchOrders();
+                    showToast('Actualizando pedidos desde Google Sheets...', 'success');
+                  }}
+                  className="bg-gradient-to-r from-yellow-400 to-yellow-500 hover:from-yellow-300 hover:to-yellow-400 text-gray-900 font-bold py-3 px-4 rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-yellow-400/20"
+                >
+                  <RefreshCw className={`w-5 h-5 ${loadingOrders ? 'animate-spin' : ''}`} />
+                  <span>Actualizar</span>
+                </button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4">
-              {orders.length === 0 ? (
-                <div className="text-center py-16 bg-gray-900 rounded-3xl border border-gray-800">
+            {loadingOrders && (
+              <div className="flex items-center gap-2 text-yellow-400 text-sm bg-yellow-400/10 px-4 py-3 rounded-xl border border-yellow-400/20">
+                <RefreshCw className="w-4 h-4 animate-spin" /> Verificando nuevos pedidos en Google Sheets...
+              </div>
+            )}
+
+            {/* Stats resumen de pedidos */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 hover:border-gray-700 transition">
+                <div className="text-xs text-gray-400 font-bold mb-1">🟡 Pendientes</div>
+                <div className="text-2xl font-black text-yellow-400">{pendingOrdersCount}</div>
+              </div>
+              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 hover:border-gray-700 transition">
+                <div className="text-xs text-gray-400 font-bold mb-1">🟢 Completados</div>
+                <div className="text-2xl font-black text-green-400">{completedOrdersCount}</div>
+              </div>
+              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 hover:border-gray-700 transition">
+                <div className="text-xs text-gray-400 font-bold mb-1">🛵 Domicilios</div>
+                <div className="text-2xl font-black text-blue-400">{domicilioCount}</div>
+              </div>
+              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 hover:border-gray-700 transition">
+                <div className="text-xs text-gray-400 font-bold mb-1">🏪 En Punto</div>
+                <div className="text-2xl font-black text-purple-400">{recogerCount}</div>
+              </div>
+              <div className="col-span-2 sm:col-span-1 bg-gray-900 border border-gray-800 rounded-2xl p-4 hover:border-gray-700 transition">
+                <div className="text-xs text-gray-400 font-bold mb-1">💰 Total Facturado</div>
+                <div className="text-xl font-black text-emerald-400 truncate">${totalFacturado.toLocaleString('es-CO')}</div>
+              </div>
+            </div>
+
+            {/* Buscador y filtros de pedidos */}
+            <div className="space-y-3">
+              <div className="bg-gray-900 border border-gray-800 p-2 rounded-2xl flex items-center">
+                <Search className="w-5 h-5 text-gray-500 ml-3 shrink-0" />
+                <input
+                  type="text"
+                  value={orderSearch}
+                  onChange={(e) => setOrderSearch(e.target.value)}
+                  placeholder="Buscar por cliente, teléfono, dirección, productos..."
+                  className="w-full bg-transparent text-white rounded-xl px-4 py-2.5 focus:outline-none text-sm placeholder-gray-500"
+                />
+                {orderSearch && (
+                  <button onClick={() => setOrderSearch('')} className="p-2 text-gray-500 hover:text-white">
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Filtros tipo pills */}
+              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
+                {[
+                  { id: 'todos', label: `Todos (${orders.length})` },
+                  { id: 'pending', label: `🟡 Pendientes (${pendingOrdersCount})` },
+                  { id: 'completed', label: `🟢 Completados (${completedOrdersCount})` },
+                  { id: 'domicilio', label: `🛵 Domicilios (${domicilioCount})` },
+                  { id: 'recoger', label: `🏪 Recoger (${recogerCount})` }
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setOrderFilter(tab.id)}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition ${orderFilter === tab.id ? 'bg-yellow-400 text-gray-950 shadow-md shadow-yellow-400/20' : 'bg-gray-900 text-gray-400 hover:text-white hover:bg-gray-800 border border-gray-800'}`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Listado de tarjetas de pedidos */}
+            <div className="grid grid-cols-1 gap-5">
+              {filteredOrders.length === 0 ? (
+                <div className="text-center py-20 bg-gray-900 rounded-3xl border border-gray-800">
                   <ClipboardList className="w-16 h-16 text-gray-700 mx-auto mb-4" />
-                  <h3 className="text-xl font-bold text-gray-300">No hay pedidos</h3>
-                  <p className="text-gray-500 mt-2">Aún no se han enviado pedidos a WhatsApp.</p>
+                  <h3 className="text-xl font-bold text-gray-300">No hay pedidos para mostrar</h3>
+                  <p className="text-gray-500 mt-2 max-w-sm mx-auto text-sm">
+                    {orderSearch ? 'No se encontraron pedidos con ese criterio de búsqueda.' : 'Los pedidos que hagan los clientes por WhatsApp aparecerán aquí automáticamente en tiempo real.'}
+                  </p>
                 </div>
               ) : (
-                orders.map((order) => (
-                  <div key={order.id} className={`flex flex-col bg-gray-900 border ${order.status === 'completed' ? 'border-green-800/50' : 'border-gray-800'} rounded-3xl p-5 md:p-6 transition shadow-lg`}>
-                    <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                          #{order.id} - {order.name}
-                          {order.status === 'completed' && (
-                            <span className="bg-green-900/30 text-green-400 text-xs px-2 py-1 rounded-md flex items-center gap-1"><Check className="w-3 h-3" /> Completado</span>
+                filteredOrders.map((order) => {
+                  const isPending = order.status === 'pending';
+                  const cleanPhone = String(order.phone || '').replace(/\D/g, '');
+                  const whatsappMsg = `*Hola ${order.name}!* Te escribimos de *Comidas Rápidas Trucco* 🍔\nRespecto a tu pedido #${order.id}:\n${order.itemsSummary || ''}\nTotal: $${Number(order.total || 0).toLocaleString('es-CO')}\n¿Confirmamos tu orden?`;
+
+                  return (
+                    <div
+                      key={order.id}
+                      className={`flex flex-col bg-gray-900 border-2 ${isPending ? 'border-yellow-400/40 shadow-xl shadow-yellow-400/5' : 'border-gray-800'} rounded-3xl p-5 md:p-6 transition relative overflow-hidden`}
+                    >
+                      {/* Cabecera del pedido */}
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-gray-800">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span className="font-mono font-bold text-sm bg-gray-800 text-gray-300 px-3 py-1 rounded-xl border border-gray-700">
+                            #{order.id}
+                          </span>
+                          
+                          {isPending ? (
+                            <span className="bg-yellow-400/10 text-yellow-400 border border-yellow-400/30 text-xs font-black px-3 py-1 rounded-full flex items-center gap-1.5 animate-pulse">
+                              <span className="w-2 h-2 rounded-full bg-yellow-400" />
+                              PENDIENTE
+                            </span>
+                          ) : (
+                            <span className="bg-green-900/30 text-green-400 border border-green-800/40 text-xs font-black px-3 py-1 rounded-full flex items-center gap-1.5">
+                              <Check className="w-3.5 h-3.5" />
+                              COMPLETADO
+                            </span>
                           )}
-                        </h3>
-                        <p className="text-xs text-gray-400 mt-1">{order.date} a las {order.time}</p>
-                      </div>
-                      <div className="text-right">
-                        <span className="font-black text-xl text-yellow-400">${order.total.toLocaleString('es-CO')}</span>
-                      </div>
-                    </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-gray-300 mb-4 bg-gray-950 p-4 rounded-xl border border-gray-800">
-                      <div>
-                        <p><strong className="text-gray-400">Teléfono:</strong> {order.phone}</p>
-                        <p><strong className="text-gray-400">Tipo:</strong> {order.orderType === 'domicilio' ? '🛵 Domicilio' : '🏪 Recoger'}</p>
-                        {order.address && <p><strong className="text-gray-400">Dirección:</strong> {order.address}</p>}
-                        {order.notes && <p><strong className="text-gray-400">Notas:</strong> {order.notes}</p>}
-                      </div>
-                      <div>
-                        <strong className="block text-gray-400 mb-1">Productos:</strong>
-                        <ul className="space-y-1">
-                          {order.items.map((item, i) => (
-                            <li key={i} className="flex justify-between border-b border-gray-800 pb-1 last:border-0">
-                              <span>{item.quantity}x {item.name} {item.variantLabel !== item.name ? `(${item.variantLabel})` : ''}</span>
-                              <span className="text-gray-500">${(item.price * item.quantity).toLocaleString('es-CO')}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
+                          <span className={`text-xs font-bold px-3 py-1 rounded-full ${order.orderType === 'domicilio' ? 'bg-blue-900/30 text-blue-400 border border-blue-800/40' : 'bg-purple-900/30 text-purple-400 border border-purple-800/40'}`}>
+                            {order.orderType === 'domicilio' ? '🛵 Domicilio' : '🏪 Recoger en Punto'}
+                          </span>
+                        </div>
 
-                    <div className="flex gap-2 justify-end mt-2 pt-4 border-t border-gray-800">
-                      {order.status !== 'completed' && (
-                        <button onClick={() => markOrderCompleted(order.id)} className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 text-white font-medium rounded-xl transition text-sm">
-                          <Check className="w-4 h-4" /> Marcar Listo
-                        </button>
-                      )}
-                      <button onClick={() => deleteOrder(order.id)} className="flex items-center gap-2 px-4 py-2 bg-red-900/30 text-red-400 hover:bg-red-900/50 hover:text-red-300 font-medium rounded-xl transition text-sm">
-                        <Trash2 className="w-4 h-4" /> Eliminar
-                      </button>
+                        <div className="flex items-center gap-2 text-xs text-gray-400">
+                          <Clock className="w-3.5 h-3.5 text-gray-500" />
+                          <span>{order.date} {order.time ? `• ${order.time}` : ''}</span>
+                        </div>
+                      </div>
+
+                      {/* Cuerpo: Datos del Cliente + Detalle de productos */}
+                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 py-5 border-b border-gray-800">
+
+                        {/* Columna izquierda: Datos del cliente (5 cols) */}
+                        <div className="lg:col-span-5 space-y-3 bg-gray-950 p-4 rounded-2xl border border-gray-800">
+                          <div>
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 block mb-0.5">Cliente</span>
+                            <h3 className="text-lg font-black text-white">{order.name}</h3>
+                          </div>
+
+                          <div>
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 block mb-1">Teléfono / Contacto</span>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <a
+                                href={`tel:${cleanPhone}`}
+                                className="inline-flex items-center gap-1.5 text-sm font-bold text-gray-300 hover:text-white bg-gray-900 hover:bg-gray-800 px-3 py-1.5 rounded-xl border border-gray-700 transition"
+                              >
+                                <Phone className="w-3.5 h-3.5 text-yellow-400" />
+                                <span>{order.phone}</span>
+                              </a>
+                              {cleanPhone && (
+                                <a
+                                  href={`https://wa.me/57${cleanPhone}?text=${encodeURIComponent(whatsappMsg)}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 text-xs font-bold text-green-400 hover:text-green-300 bg-green-950/80 hover:bg-green-900/80 px-2.5 py-1.5 rounded-xl border border-green-800/50 transition"
+                                >
+                                  <MessageCircle className="w-3.5 h-3.5" />
+                                  <span>WhatsApp</span>
+                                </a>
+                              )}
+                            </div>
+                          </div>
+
+                          {order.orderType === 'domicilio' && order.address && (
+                            <div className="bg-blue-950/40 border border-blue-900/50 p-3 rounded-xl">
+                              <div className="flex items-start gap-2 text-blue-300 text-xs">
+                                <MapPin className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
+                                <div>
+                                  <strong className="block text-blue-200">Dirección de Entrega:</strong>
+                                  <p className="mt-0.5">{order.address}</p>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {order.notes && (
+                            <div className="bg-yellow-950/30 border border-yellow-900/40 p-3 rounded-xl">
+                              <span className="text-[11px] font-bold text-yellow-400 block mb-0.5">Observaciones del cliente:</span>
+                              <p className="text-xs text-yellow-200/90 italic">"{order.notes}"</p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Columna derecha: Productos y Total (7 cols) */}
+                        <div className="lg:col-span-7 flex flex-col justify-between space-y-4">
+                          <div>
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 block mb-2">Detalle de Productos</span>
+                            
+                            {/* Si tiene items como array */}
+                            {Array.isArray(order.items) && order.items.length > 0 ? (
+                              <div className="space-y-2 bg-gray-950/60 p-3.5 rounded-2xl border border-gray-800/80">
+                                {order.items.map((item, idx) => (
+                                  <div key={idx} className="flex justify-between items-center text-sm py-1.5 border-b border-gray-800/60 last:border-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-black text-yellow-400 bg-yellow-400/10 px-2 py-0.5 rounded-lg text-xs">
+                                        {item.quantity}x
+                                      </span>
+                                      <span className="font-medium text-white">{item.name}</span>
+                                      {item.variantLabel && item.variantLabel !== item.name && (
+                                        <span className="text-xs text-gray-400">({item.variantLabel})</span>
+                                      )}
+                                    </div>
+                                    <span className="font-bold text-gray-300">
+                                      ${((item.price || 0) * (item.quantity || 1)).toLocaleString('es-CO')}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              /* Fallback a resumen texto */
+                              <div className="bg-gray-950/60 p-4 rounded-2xl border border-gray-800/80 text-sm text-gray-300 leading-relaxed">
+                                {order.itemsSummary || 'Sin detalle de productos'}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Total a pagar */}
+                          <div className="flex justify-between items-center bg-gray-950 p-4 rounded-2xl border border-gray-800">
+                            <span className="font-bold text-gray-400 text-sm">TOTAL A COBRAR</span>
+                            <span className="text-2xl font-black text-yellow-400">
+                              ${Number(order.total || 0).toLocaleString('es-CO')} COP
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Botones de acción inferiores */}
+                      <div className="flex flex-col sm:flex-row justify-between items-center gap-3 pt-4">
+                        <div className="flex items-center gap-2 w-full sm:w-auto">
+                          {cleanPhone && (
+                            <a
+                              href={`https://wa.me/57${cleanPhone}?text=${encodeURIComponent(whatsappMsg)}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-500 text-white font-bold rounded-xl transition text-sm shadow-md shadow-green-600/20"
+                            >
+                              <MessageCircle className="w-4 h-4" />
+                              <span>Escribir por WhatsApp</span>
+                            </a>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                          <button
+                            onClick={() => handleToggleStatus(order)}
+                            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 font-bold rounded-xl transition text-sm ${isPending ? 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white shadow-lg shadow-green-500/20' : 'bg-gray-800 hover:bg-gray-700 text-yellow-400 border border-yellow-400/20'}`}
+                          >
+                            <Check className="w-4 h-4" />
+                            <span>{isPending ? 'Marcar como Listo' : 'Reabrir Pedido'}</span>
+                          </button>
+
+                          <button
+                            onClick={() => setDeleteOrderConfirm(order.id)}
+                            className="p-2.5 bg-red-900/20 hover:bg-red-900/40 text-red-400 rounded-xl transition"
+                            title="Eliminar pedido"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
+
+            {/* Banner explicativo sincronización */}
+            <div className="bg-gray-900 border border-gray-800 rounded-3xl p-6 text-sm text-gray-400 flex items-start gap-4">
+              <Sparkles className="w-6 h-6 text-yellow-400 shrink-0 mt-1" />
+              <div className="space-y-1">
+                <strong className="text-white block text-base">¿Cómo funciona la gestión de pedidos?</strong>
+                <p>
+                  Cuando un cliente pulsa <strong>"Confirmar y Enviar por WhatsApp"</strong>, el sistema envía el pedido automáticamente a tu hoja de Google Sheets en la pestaña <code className="bg-gray-800 px-1.5 py-0.5 rounded text-yellow-400">pedidos</code> y se sincroniza con este panel.
+                </p>
+                <p className="text-xs text-gray-500 pt-1">
+                  Puedes dejar esta pantalla abierta en tu computador o celular: sonará una campanita cada vez que entre un nuevo pedido y se actualizará automáticamente cada 12 segundos.
+                </p>
+              </div>
+            </div>
+
           </div>
         )}
 
