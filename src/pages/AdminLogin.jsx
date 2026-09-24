@@ -123,7 +123,7 @@ export default function AdminLogin({ onLogin }) {
 
           <div className="bg-gray-950/60 border border-gray-800/80 rounded-xl p-3.5 mt-6 text-center">
             <p className="text-gray-400 text-xs">
-              Usuarios sincronizados con Google Sheets (pestaña <span className="text-yellow-400 font-semibold">usuarios</span>).
+              🔐 Acceso seguro al sistema. Ingresa tus credenciales para continuar.
             </p>
           </div>
         </div>
