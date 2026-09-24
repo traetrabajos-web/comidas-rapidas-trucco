@@ -14,7 +14,7 @@ const SHEET_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export
 // GID 1947904445 = pestaña "categorias"
 const CATEGORIES_CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=1947904445`;
 // Apps Script para escribir desde el panel de admin
-export const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxEPuHcr7MrQeElzbgeeYDTdqnw9uww66SypR0izc8ktIgaTZZNI4dWfqr4Cs6wEG00/exec';
+export const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwAmwqHiaZ1ttSU-AblYS25gbhyxRQvEtHyVNhfY4abZGZxNiarHRp4eaIb7RmgWLKf/exec';
 
 // Cuánto tiempo guardar el caché (5 minutos)
 const CACHE_TTL = 5 * 60 * 1000;
