@@ -78,7 +78,7 @@ export default function CheckoutModal({ isOpen, onClose, cart, onConfirmOrder })
       return;
     }
 
-    // 4. Validaciones estrictas de datos
+    // 4. Validaciones estrictas de datos y anti-spam
     const cleanName = formData.name.trim();
     if (cleanName.length < 3) {
       setErrorMessage('Por favor escribe tu nombre completo (mínimo 3 letras).');
@@ -86,8 +86,8 @@ export default function CheckoutModal({ isOpen, onClose, cart, onConfirmOrder })
     }
 
     const cleanPhone = formData.phone.replace(/\D/g, '');
-    if (cleanPhone.length < 10) {
-      setErrorMessage('Por favor ingresa un número de teléfono válido de 10 dígitos (Ej: 310 123 4567).');
+    if (cleanPhone.length !== 10 || !cleanPhone.startsWith('3')) {
+      setErrorMessage('Por favor ingresa un número celular válido de 10 dígitos que empiece por 3 (Ej: 304 304 0067).');
       return;
     }
 
@@ -99,7 +99,16 @@ export default function CheckoutModal({ isOpen, onClose, cart, onConfirmOrder })
       }
     }
 
-    // Bloquear el botón inmediatamente para proteger de spam / spam-clicking
+    // 5. Control anti-duplicados: Evitar enviar exactamente el mismo pedido en menos de 2 minutos
+    const lastOrderHash = localStorage.getItem('trucco_last_order_hash');
+    const currentOrderHash = `${cleanPhone}_${total}_${cart.map(i => `${i.id || i.name}x${i.quantity}`).join('_')}`;
+    const lastOrderTime = Number(localStorage.getItem('trucco_last_order_timestamp') || 0);
+    if (lastOrderHash === currentOrderHash && (Date.now() - lastOrderTime < 120000)) {
+      setErrorMessage('⚠️ Ya enviaste este mismo pedido hace un momento. Si deseas modificarlo o confirmar, escríbenos directamente a WhatsApp.');
+      return;
+    }
+
+    // Bloquear el botón inmediatamente para proteger de envíos repetidos
     setIsSubmitting(true);
 
     try {
@@ -195,8 +204,9 @@ export default function CheckoutModal({ isOpen, onClose, cart, onConfirmOrder })
       }
       rawWhatsAppText += `\n¡Quedo atento a su confirmación! Muchas gracias. 🙌`;
 
-      // Registrar timestamp en almacenamiento local para anti-spam persistente
+      // Registrar timestamp y hash en almacenamiento local para anti-spam y anti-duplicados persistente
       localStorage.setItem('trucco_last_order_timestamp', Date.now().toString());
+      localStorage.setItem('trucco_last_order_hash', currentOrderHash);
       setCooldownRemaining(COOLDOWN_SECONDS);
 
       // --- Guardar en Google Sheets (Hoja de pedidos) ---

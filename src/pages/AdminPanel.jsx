@@ -4,7 +4,7 @@ import {
   ChefHat, Search, Package, AlertTriangle, CheckCircle,
   ExternalLink, X, RefreshCw, Eye, ClipboardList, Check, Tag,
   Volume2, VolumeX, Phone, MessageCircle, MapPin, Bell, Clock,
-  Sparkles
+  Sparkles, XCircle
 } from 'lucide-react';
 import { useAdminProducts } from '../hooks/useAdminProducts';
 import AdminProductForm from './AdminProductForm';
@@ -31,7 +31,6 @@ function playOrderChime() {
       osc.stop(start + duration);
     };
 
-    // Melodía tipo campanita (Do5 -> Mi5 -> Sol5 -> Do6)
     playTone(523.25, now, 0.25);
     playTone(659.25, now + 0.12, 0.3);
     playTone(783.99, now + 0.24, 0.35);
@@ -66,14 +65,14 @@ export default function AdminPanel({ onLogout }) {
   const [deleteCatConfirm, setDeleteCatConfirm] = useState(null);
 
   // ─── Estado para Gestión y Notificaciones de Pedidos ───
-  const [orderFilter, setOrderFilter] = useState('todos'); // 'todos' | 'pending' | 'completed' | 'domicilio' | 'recoger'
+  const [orderFilter, setOrderFilter] = useState('todos'); // 'todos' | 'pending' | 'completed' | 'cancelled' | 'domicilio' | 'recoger'
   const [orderSearch, setOrderSearch] = useState('');
   const [deleteOrderConfirm, setDeleteOrderConfirm] = useState(null);
   const [soundEnabled, setSoundEnabled] = useState(() => {
     const saved = localStorage.getItem('trucco_sound_enabled');
     return saved !== null ? saved === 'true' : true;
   });
-  const [newOrderAlert, setNewOrderAlert] = useState(null); // Último pedido entrante para banner
+  const [newOrderAlert, setNewOrderAlert] = useState(null);
   const prevOrderIdsRef = useRef(new Set());
   const isFirstLoadRef = useRef(true);
 
@@ -98,7 +97,7 @@ export default function AdminPanel({ onLogout }) {
     }
   };
 
-  // ─── Sincronización en vivo y sondeo de pedidos cada 12 segundos ───
+  // ─── Sincronización en vivo cada 12 segundos ───
   useEffect(() => {
     const syncOrders = async () => {
       const serverOrders = await fetchOrders();
@@ -106,7 +105,6 @@ export default function AdminPanel({ onLogout }) {
         const currentIds = new Set(serverOrders.map(o => String(o.id)));
         
         if (!isFirstLoadRef.current) {
-          // Detectar si hay nuevos pedidos que no estaban en la lista anterior
           const newlyArrived = serverOrders.filter(
             o => !prevOrderIdsRef.current.has(String(o.id)) && o.status === 'pending'
           );
@@ -118,7 +116,6 @@ export default function AdminPanel({ onLogout }) {
             setNewOrderAlert(newest);
             showToast(`🔔 ¡NUEVO PEDIDO! De ${newest.name} por $${newest.total.toLocaleString('es-CO')}`, 'success');
 
-            // Notificación del navegador si está permitida
             if ('Notification' in window && Notification.permission === 'granted') {
               try {
                 new Notification('🍔 Comidas Rápidas Trucco - ¡Nuevo Pedido!', {
@@ -135,15 +132,11 @@ export default function AdminPanel({ onLogout }) {
       }
     };
 
-    // Carga inicial inmediata
     syncOrders();
-
-    // Sondeo periódico cada 12 segundos
     const interval = setInterval(syncOrders, 12000);
     return () => clearInterval(interval);
   }, [fetchOrders, soundEnabled]);
 
-  // Solicitar permiso de notificaciones del navegador
   const requestNotificationPermission = async () => {
     if ('Notification' in window) {
       const perm = await Notification.requestPermission();
@@ -220,10 +213,10 @@ export default function AdminPanel({ onLogout }) {
   };
 
   // ─── Handlers Pedidos ──────────────────────────────
-  const handleToggleStatus = async (order) => {
-    const nextStatus = order.status === 'completed' ? 'pending' : 'completed';
-    await updateOrderStatus(order.id, nextStatus);
-    showToast(nextStatus === 'completed' ? `Pedido #${order.id} marcado como COMPLETADO` : `Pedido #${order.id} reabierto como PENDIENTE`);
+  const handleSetOrderStatus = async (order, newStatus) => {
+    await updateOrderStatus(order.id, newStatus);
+    const label = newStatus === 'completed' ? 'COMPLETADO' : newStatus === 'cancelled' ? 'CANCELADO' : 'PENDIENTE';
+    showToast(`Pedido #${order.id} marcado como ${label}`);
   };
 
   const confirmDeleteOrder = async () => {
@@ -249,13 +242,17 @@ export default function AdminPanel({ onLogout }) {
 
   const pendingOrdersCount = orders.filter(o => o.status === 'pending').length;
   const completedOrdersCount = orders.filter(o => o.status === 'completed').length;
+  const cancelledOrdersCount = orders.filter(o => o.status === 'cancelled').length;
   const domicilioCount = orders.filter(o => o.orderType === 'domicilio').length;
   const recogerCount = orders.filter(o => o.orderType === 'recoger').length;
-  const totalFacturado = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
+  const totalFacturado = orders
+    .filter(o => o.status !== 'cancelled')
+    .reduce((sum, o) => sum + (Number(o.total) || 0), 0);
 
   const filteredOrders = orders.filter((order) => {
     if (orderFilter === 'pending' && order.status !== 'pending') return false;
     if (orderFilter === 'completed' && order.status !== 'completed') return false;
+    if (orderFilter === 'cancelled' && order.status !== 'cancelled') return false;
     if (orderFilter === 'domicilio' && order.orderType !== 'domicilio') return false;
     if (orderFilter === 'recoger' && order.orderType !== 'recoger') return false;
 
@@ -945,7 +942,7 @@ export default function AdminPanel({ onLogout }) {
             )}
 
             {/* Stats resumen de pedidos */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 sm:gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5 sm:gap-4">
               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 hover:border-gray-700 transition">
                 <div className="text-xs text-gray-400 font-bold mb-1">🟡 Pendientes</div>
                 <div className="text-2xl font-black text-yellow-400">{pendingOrdersCount}</div>
@@ -953,6 +950,10 @@ export default function AdminPanel({ onLogout }) {
               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 hover:border-gray-700 transition">
                 <div className="text-xs text-gray-400 font-bold mb-1">🟢 Completados</div>
                 <div className="text-2xl font-black text-green-400">{completedOrdersCount}</div>
+              </div>
+              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 hover:border-gray-700 transition">
+                <div className="text-xs text-gray-400 font-bold mb-1">🔴 Cancelados</div>
+                <div className="text-2xl font-black text-red-400">{cancelledOrdersCount}</div>
               </div>
               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 hover:border-gray-700 transition">
                 <div className="text-xs text-gray-400 font-bold mb-1">🛵 Domicilios</div>
@@ -992,6 +993,7 @@ export default function AdminPanel({ onLogout }) {
                   { id: 'todos', label: `Todos (${orders.length})` },
                   { id: 'pending', label: `🟡 Pendientes (${pendingOrdersCount})` },
                   { id: 'completed', label: `🟢 Completados (${completedOrdersCount})` },
+                  { id: 'cancelled', label: `🔴 Cancelados (${cancelledOrdersCount})` },
                   { id: 'domicilio', label: `🛵 Domicilios (${domicilioCount})` },
                   { id: 'recoger', label: `🏪 Recoger (${recogerCount})` }
                 ].map((tab) => (
@@ -1019,13 +1021,15 @@ export default function AdminPanel({ onLogout }) {
               ) : (
                 filteredOrders.map((order) => {
                   const isPending = order.status === 'pending';
+                  const isCancelled = order.status === 'cancelled';
+                  const isCompleted = order.status === 'completed';
                   const cleanPhone = String(order.phone || '').replace(/\D/g, '');
                   const whatsappMsg = `*Hola ${order.name}!* Te escribimos de *Comidas Rápidas Trucco* 🍔\nRespecto a tu pedido #${order.id}:\n${order.itemsSummary || ''}\nTotal: $${Number(order.total || 0).toLocaleString('es-CO')}\n¿Confirmamos tu orden?`;
 
                   return (
                     <div
                       key={order.id}
-                      className={`flex flex-col bg-gray-900 border-2 ${isPending ? 'border-yellow-400/40 shadow-xl shadow-yellow-400/5' : 'border-gray-800'} rounded-3xl p-5 md:p-6 transition relative overflow-hidden`}
+                      className={`flex flex-col bg-gray-900 border-2 ${isPending ? 'border-yellow-400/40 shadow-xl shadow-yellow-400/5' : isCancelled ? 'border-red-900/40 opacity-75' : 'border-green-800/40'} rounded-3xl p-5 md:p-6 transition relative overflow-hidden`}
                     >
                       {/* Cabecera del pedido */}
                       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-gray-800">
@@ -1034,15 +1038,24 @@ export default function AdminPanel({ onLogout }) {
                             #{order.id}
                           </span>
                           
-                          {isPending ? (
+                          {isPending && (
                             <span className="bg-yellow-400/10 text-yellow-400 border border-yellow-400/30 text-xs font-black px-3 py-1 rounded-full flex items-center gap-1.5 animate-pulse">
                               <span className="w-2 h-2 rounded-full bg-yellow-400" />
                               PENDIENTE
                             </span>
-                          ) : (
+                          )}
+
+                          {isCompleted && (
                             <span className="bg-green-900/30 text-green-400 border border-green-800/40 text-xs font-black px-3 py-1 rounded-full flex items-center gap-1.5">
                               <Check className="w-3.5 h-3.5" />
                               COMPLETADO
+                            </span>
+                          )}
+
+                          {isCancelled && (
+                            <span className="bg-red-900/30 text-red-400 border border-red-800/40 text-xs font-black px-3 py-1 rounded-full flex items-center gap-1.5">
+                              <XCircle className="w-3.5 h-3.5" />
+                              CANCELADO / NO ENVIADO
                             </span>
                           )}
 
@@ -1168,14 +1181,37 @@ export default function AdminPanel({ onLogout }) {
                           )}
                         </div>
 
-                        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                          <button
-                            onClick={() => handleToggleStatus(order)}
-                            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2.5 font-bold rounded-xl transition text-sm ${isPending ? 'bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white shadow-lg shadow-green-500/20' : 'bg-gray-800 hover:bg-gray-700 text-yellow-400 border border-yellow-400/20'}`}
-                          >
-                            <Check className="w-4 h-4" />
-                            <span>{isPending ? 'Marcar como Listo' : 'Reabrir Pedido'}</span>
-                          </button>
+                        <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
+                          {isPending && (
+                            <>
+                              <button
+                                onClick={() => handleSetOrderStatus(order, 'completed')}
+                                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 font-bold rounded-xl transition text-sm bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-white shadow-lg shadow-green-500/20"
+                              >
+                                <Check className="w-4 h-4" />
+                                <span>Marcar Listo</span>
+                              </button>
+
+                              <button
+                                onClick={() => handleSetOrderStatus(order, 'cancelled')}
+                                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2.5 font-bold rounded-xl transition text-xs bg-red-950/50 hover:bg-red-900/60 text-red-400 border border-red-800/40"
+                                title="Marcar como cancelado si el cliente no envió el WhatsApp"
+                              >
+                                <XCircle className="w-4 h-4" />
+                                <span>Cancelar</span>
+                              </button>
+                            </>
+                          )}
+
+                          {!isPending && (
+                            <button
+                              onClick={() => handleSetOrderStatus(order, 'pending')}
+                              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2.5 font-bold rounded-xl transition text-sm bg-gray-800 hover:bg-gray-700 text-yellow-400 border border-yellow-400/20"
+                            >
+                              <RefreshCw className="w-4 h-4" />
+                              <span>Reabrir Pedido</span>
+                            </button>
+                          )}
 
                           <button
                             onClick={() => setDeleteOrderConfirm(order.id)}
@@ -1196,12 +1232,9 @@ export default function AdminPanel({ onLogout }) {
             <div className="bg-gray-900 border border-gray-800 rounded-3xl p-6 text-sm text-gray-400 flex items-start gap-4">
               <Sparkles className="w-6 h-6 text-yellow-400 shrink-0 mt-1" />
               <div className="space-y-1">
-                <strong className="text-white block text-base">¿Cómo funciona la gestión de pedidos?</strong>
+                <strong className="text-white block text-base">¿Cómo funciona el control de pedidos?</strong>
                 <p>
-                  Cuando un cliente pulsa <strong>"Confirmar y Enviar por WhatsApp"</strong>, el sistema envía el pedido automáticamente a tu hoja de Google Sheets en la pestaña <code className="bg-gray-800 px-1.5 py-0.5 rounded text-yellow-400">pedidos</code> y se sincroniza con este panel.
-                </p>
-                <p className="text-xs text-gray-500 pt-1">
-                  Puedes dejar esta pantalla abierta en tu computador o celular: sonará una campanita cada vez que entre un nuevo pedido y se actualizará automáticamente cada 12 segundos.
+                  El sistema cuenta con un sistema de <strong>anti-duplicados y rate-limiting de 60 segundos</strong> que impide que clientes envíen múltiples pedidos repetidos por error. Si un cliente inicia un pedido pero luego no envía el WhatsApp o decide cancelar, puedes presionar el botón <strong>"Cancelar"</strong> o <strong>"Eliminar"</strong> para descartarlo de inmediato.
                 </p>
               </div>
             </div>
