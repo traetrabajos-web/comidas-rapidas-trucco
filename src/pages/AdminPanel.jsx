@@ -2,10 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import {
   LogOut, Plus, Pencil, Trash2,
   ChefHat, Search, Package, AlertTriangle, CheckCircle,
-  ExternalLink, X, RefreshCw, Eye, ClipboardList, Check,
+  ExternalLink, X, RefreshCw, Eye, EyeOff, ClipboardList, Check,
   FolderPlus, Layers, Phone, MapPin, Clock, Bell, Volume2, RotateCcw,
   Users, KeyRound, UserPlus, ShieldCheck, UserCheck, Lock,
-  Sun, Moon, DollarSign, Edit3, Tag
+  Sun, Moon, DollarSign, Edit3, Tag, Copy
 } from 'lucide-react';
 import { useAdminProducts } from '../hooks/useAdminProducts';
 import { useAdminUsers } from '../hooks/useAdminUsers';
@@ -85,7 +85,10 @@ export default function AdminPanel({ onLogout }) {
   const [newCategoryInput, setNewCategoryInput] = useState('');
   const [toast, setToast] = useState(null);
 
-  // Estados para creación y cambio de clave de usuario
+  // Estados para creación, cambio de clave y copiado de credenciales
+  const [copiedUserId, setCopiedUserId] = useState(null);
+  const [showUserPasswordMap, setShowUserPasswordMap] = useState({});
+
   const [isChangingPassModal, setIsChangingPassModal] = useState(false);
   const [selectedUserForPass, setSelectedUserForPass] = useState(null);
   const [newPasswordVal, setNewPasswordVal] = useState('');
@@ -322,7 +325,52 @@ export default function AdminPanel({ onLogout }) {
     }
   };
 
-  // Manejo de Usuarios y Claves
+  // ── MANEJO DE USUARIOS, CLAVES Y COPIAR CREDENCIALES ──
+  const toggleShowPassword = (userId) => {
+    setShowUserPasswordMap(prev => ({
+      ...prev,
+      [userId]: !prev[userId]
+    }));
+  };
+
+  const fallbackCopyText = (text) => {
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.position = "fixed";
+    textArea.style.left = "-999999px";
+    textArea.style.top = "-999999px";
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try {
+      document.execCommand('copy');
+    } catch (err) {
+      console.error('Fallback copy failed', err);
+    }
+    document.body.removeChild(textArea);
+  };
+
+  const handleCopyCredentials = (user) => {
+    const textToCopy = `Usuario: ${user.usuario}\nContraseña: ${user.password}`;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        setCopiedUserId(user.id);
+        showToast(`¡Credenciales de @${user.usuario} copiadas al portapapeles!`);
+        setTimeout(() => setCopiedUserId(null), 2500);
+      }).catch(err => {
+        fallbackCopyText(textToCopy);
+        setCopiedUserId(user.id);
+        showToast(`¡Credenciales de @${user.usuario} copiadas al portapapeles!`);
+        setTimeout(() => setCopiedUserId(null), 2500);
+      });
+    } else {
+      fallbackCopyText(textToCopy);
+      setCopiedUserId(user.id);
+      showToast(`¡Credenciales de @${user.usuario} copiadas al portapapeles!`);
+      setTimeout(() => setCopiedUserId(null), 2500);
+    }
+  };
+
   const handleOpenChangePass = (user) => {
     setSelectedUserForPass(user);
     setNewPasswordVal('');
@@ -548,7 +596,7 @@ export default function AdminPanel({ onLogout }) {
         </div>
       )}
 
-      {/* ── MODAL: Editar / Renombrar Categoría (NUEVO - Solicitado por el usuario) ── */}
+      {/* ── MODAL: Editar / Renombrar Categoría ── */}
       {editingCategory && (
         <div 
           className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[70] flex items-center justify-center p-4"
@@ -1669,7 +1717,7 @@ export default function AdminPanel({ onLogout }) {
           </div>
         )}
 
-        {/* ══════════════ TAB DE USUARIOS Y CLAVES ══════════════ */}
+        {/* ══════════════ TAB DE USUARIOS Y CLAVES (CON BOTÓN COPIAR CREDENCIALES) ══════════════ */}
         {activeTab === 'usuarios' && (
           <div className="p-4 sm:p-6 md:p-8 xl:p-10 space-y-6 md:space-y-8 w-full max-w-[1920px] mx-auto">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -1723,16 +1771,26 @@ export default function AdminPanel({ onLogout }) {
                   </div>
                 </div>
 
-                <button
-                  onClick={() => handleOpenChangePass(currentUser)}
-                  className={`${isDark ? 'bg-gray-800 hover:bg-gray-700 text-amber-400 border-gray-700' : 'bg-white hover:bg-slate-100 text-amber-700 border-amber-300 shadow-sm'} border px-5 py-2.5 rounded-xl font-bold text-sm transition flex items-center justify-center gap-2`}
-                >
-                  <KeyRound className="w-4 h-4 text-amber-500" /> Cambiar mi contraseña
-                </button>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => handleCopyCredentials(currentUser)}
+                    className={`${isDark ? 'bg-gray-800 hover:bg-gray-700 text-amber-400 border-gray-700' : 'bg-white hover:bg-slate-100 text-amber-800 border-amber-300 shadow-sm'} border px-4 py-2.5 rounded-xl font-bold text-sm transition flex items-center justify-center gap-2`}
+                  >
+                    {copiedUserId === currentUser.id ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4 text-amber-500" />}
+                    <span>{copiedUserId === currentUser.id ? '¡Copiado!' : 'Copiar mis credenciales'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleOpenChangePass(currentUser)}
+                    className={`${isDark ? 'bg-gray-800 hover:bg-gray-700 text-white border-gray-700' : 'bg-white hover:bg-slate-100 text-slate-800 border-slate-300 shadow-sm'} border px-4 py-2.5 rounded-xl font-bold text-sm transition flex items-center justify-center gap-2`}
+                  >
+                    <KeyRound className="w-4 h-4 text-amber-500" /> Cambiar mi contraseña
+                  </button>
+                </div>
               </div>
             )}
 
-            {/* Grid de todos los usuarios registrados */}
+            {/* Grid de todos los usuarios registrados con botón COPIAR CREDENCIALES */}
             <div className="w-full">
               <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
                 <Users className="w-5 h-5 text-amber-500" /> Cuentas Registradas en el Sistema ({users.length})
@@ -1741,50 +1799,95 @@ export default function AdminPanel({ onLogout }) {
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 min-[1900px]:grid-cols-6 gap-4 w-full">
                 {users.map((u) => {
                   const isCurrent = currentUser && currentUser.id === u.id;
+                  const isPassVisible = !!showUserPasswordMap[u.id];
+
                   return (
                     <div 
                       key={u.id} 
-                      className={`${isDark ? 'bg-gray-900 border-gray-800 hover:border-gray-700' : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'} ${isCurrent ? 'ring-2 ring-amber-400' : ''} border p-5 rounded-3xl flex flex-col justify-between transition`}
+                      className={`${isDark ? 'bg-gray-900 border-gray-800 hover:border-gray-700' : 'bg-white border-slate-200 hover:border-slate-300 shadow-sm'} ${isCurrent ? 'ring-2 ring-amber-400' : ''} border p-5 rounded-3xl flex flex-col justify-between transition hover:shadow-md`}
                     >
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-xl ${isDark ? 'bg-gray-800 text-amber-400' : 'bg-slate-100 text-amber-600'} flex items-center justify-center font-bold`}>
-                            <UserCheck className="w-5 h-5" />
+                      <div>
+                        {/* Cabecera de la tarjeta del usuario */}
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-11 h-11 rounded-2xl ${isDark ? 'bg-gray-800 text-amber-400' : 'bg-amber-50 text-amber-600'} flex items-center justify-center font-bold`}>
+                              <UserCheck className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-base leading-tight">{u.nombre || u.usuario}</h4>
+                              <span className="text-xs text-amber-500 font-mono font-bold">@{u.usuario}</span>
+                            </div>
                           </div>
-                          <div>
-                            <h4 className="font-bold text-base leading-tight">{u.nombre || u.usuario}</h4>
-                            <span className="text-xs text-amber-500 font-mono font-bold">@{u.usuario}</span>
-                          </div>
+                          <span className={`text-[10px] ${isDark ? 'bg-gray-800 text-gray-300 border-gray-700' : 'bg-slate-100 text-slate-600 border-slate-200'} uppercase px-2.5 py-1 rounded-full border font-bold tracking-wider`}>
+                            {u.rol || 'admin'}
+                          </span>
                         </div>
-                        <span className={`text-[10px] ${isDark ? 'bg-gray-800 text-gray-300 border-gray-700' : 'bg-slate-100 text-slate-600 border-slate-200'} uppercase px-2 py-0.5 rounded-md border font-semibold`}>
-                          {u.rol || 'admin'}
-                        </span>
-                      </div>
 
-                      <div className={`${isDark ? 'bg-gray-950 border-gray-800' : 'bg-slate-50 border-slate-200'} p-3 rounded-xl border mb-4 flex items-center justify-between text-xs`}>
-                        <span className={`flex items-center gap-1.5 ${isDark ? 'text-gray-400' : 'text-slate-500'}`}>
-                          <Lock className="w-3.5 h-3.5 opacity-60" /> Clave:
-                        </span>
-                        <span className="font-mono opacity-60">••••••••</span>
-                      </div>
-
-                      <div className={`flex items-center gap-2 pt-2 border-t ${isDark ? 'border-gray-800' : 'border-slate-100'}`}>
-                        <button
-                          onClick={() => handleOpenChangePass(u)}
-                          className={`flex-1 ${isDark ? 'bg-gray-800 hover:bg-gray-700 text-gray-200' : 'bg-slate-100 hover:bg-slate-200 text-slate-800'} py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5`}
-                        >
-                          <KeyRound className="w-3.5 h-3.5 text-amber-500" /> Cambiar clave
-                        </button>
-                        
-                        {users.length > 1 && (
+                        {/* Info de Contraseña con ver/ocultar */}
+                        <div className={`${isDark ? 'bg-gray-950 border-gray-800' : 'bg-slate-50 border-slate-200'} p-3 rounded-2xl border mb-3 flex items-center justify-between text-xs`}>
+                          <div className="flex items-center gap-2 overflow-hidden">
+                            <Lock className={`w-3.5 h-3.5 ${isDark ? 'text-gray-400' : 'text-slate-400'} shrink-0`} />
+                            <span className={`${isDark ? 'text-gray-400' : 'text-slate-500'} font-medium`}>Clave:</span>
+                            <span className="font-mono font-bold truncate text-amber-500">
+                              {isPassVisible ? u.password : '••••••••'}
+                            </span>
+                          </div>
                           <button
-                            onClick={() => setDeleteUserConfirm(u)}
-                            className={`p-2 ${isDark ? 'text-gray-500 hover:text-red-400 hover:bg-red-900/20' : 'text-slate-400 hover:text-red-600 hover:bg-red-50'} rounded-xl transition`}
-                            title={`Eliminar usuario @${u.usuario}`}
+                            type="button"
+                            onClick={() => toggleShowPassword(u.id)}
+                            className={`p-1.5 rounded-lg transition ${isDark ? 'hover:bg-gray-800 text-gray-400 hover:text-white' : 'hover:bg-slate-200 text-slate-500 hover:text-slate-900'}`}
+                            title={isPassVisible ? "Ocultar contraseña" : "Ver contraseña"}
                           >
-                            <Trash2 className="w-4 h-4" />
+                            {isPassVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                           </button>
-                        )}
+                        </div>
+                      </div>
+
+                      <div className="space-y-2 pt-1">
+                        {/* Botón COPIAR CREDENCIALES (Solicitado por el usuario) */}
+                        <button
+                          onClick={() => handleCopyCredentials(u)}
+                          className={`w-full py-2.5 px-3 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2 shadow-sm ${
+                            copiedUserId === u.id
+                              ? 'bg-green-600 text-white shadow-green-600/20'
+                              : isDark
+                                ? 'bg-amber-400/10 text-amber-400 hover:bg-amber-400/20 border border-amber-400/30'
+                                : 'bg-amber-50 text-amber-900 hover:bg-amber-100 border border-amber-300'
+                          }`}
+                          title={`Copiar usuario @${u.usuario} y su contraseña`}
+                        >
+                          {copiedUserId === u.id ? (
+                            <>
+                              <Check className="w-4 h-4" />
+                              <span>¡Credenciales Copiadas!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-4 h-4 text-amber-500" />
+                              <span>Copiar credenciales</span>
+                            </>
+                          )}
+                        </button>
+
+                        {/* Botones de acción: Cambiar clave y Eliminar */}
+                        <div className={`flex items-center gap-2 pt-2 border-t ${isDark ? 'border-gray-800' : 'border-slate-100'}`}>
+                          <button
+                            onClick={() => handleOpenChangePass(u)}
+                            className={`flex-1 ${isDark ? 'bg-gray-800 hover:bg-gray-700 text-gray-200' : 'bg-slate-100 hover:bg-slate-200 text-slate-800'} py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5`}
+                          >
+                            <KeyRound className="w-3.5 h-3.5 text-amber-500" /> Cambiar clave
+                          </button>
+                          
+                          {users.length > 1 && (
+                            <button
+                              onClick={() => setDeleteUserConfirm(u)}
+                              className={`p-2 ${isDark ? 'text-gray-500 hover:text-red-400 hover:bg-red-900/20' : 'text-slate-400 hover:text-red-600 hover:bg-red-50'} rounded-xl transition`}
+                              title={`Eliminar usuario @${u.usuario}`}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   );
@@ -1797,7 +1900,7 @@ export default function AdminPanel({ onLogout }) {
               <p><strong className="text-amber-500">💡 ¿Cómo funciona la tabla de usuarios?</strong></p>
               <p>1. Los usuarios y contraseñas se leen de la pestaña <strong><code>usuarios</code></strong> en tu Google Sheet.</p>
               <p>2. Al cambiar la clave o crear un usuario desde este panel, se sincroniza en vivo con tu hoja de cálculo.</p>
-              <p>3. Puedes usar tu usuario (ej. <code>admin</code> u <code>olga</code>) con su respectiva contraseña para iniciar sesión en cualquier dispositivo.</p>
+              <p>3. Puedes usar el botón <strong>"Copiar credenciales"</strong> para pegar rápidamente el usuario y la contraseña en la pantalla de inicio de sesión.</p>
             </div>
           </div>
         )}
