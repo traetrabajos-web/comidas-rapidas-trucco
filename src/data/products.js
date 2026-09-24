@@ -4,7 +4,7 @@
 // WhatsApp: 3043040067
 // ═══════════════════════════════════════════════════
 
-export const WHATSAPP_NUMBER = "573043040067";
+export const WHATSAPP_NUMBER = "3171922866";
 
 export const categories = [
   "Todos",
