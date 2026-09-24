@@ -4,7 +4,7 @@ import {
   ChefHat, Search, Package, AlertTriangle, CheckCircle,
   ExternalLink, X, RefreshCw, Eye, ClipboardList, Check, Tag,
   Volume2, VolumeX, Phone, MessageCircle, MapPin, Bell, Clock,
-  FileText, Sparkles, AlertCircle
+  Sparkles
 } from 'lucide-react';
 import { useAdminProducts } from '../hooks/useAdminProducts';
 import AdminProductForm from './AdminProductForm';
@@ -254,13 +254,11 @@ export default function AdminPanel({ onLogout }) {
   const totalFacturado = orders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
 
   const filteredOrders = orders.filter((order) => {
-    // Filtro por tab/estado
     if (orderFilter === 'pending' && order.status !== 'pending') return false;
     if (orderFilter === 'completed' && order.status !== 'completed') return false;
     if (orderFilter === 'domicilio' && order.orderType !== 'domicilio') return false;
     if (orderFilter === 'recoger' && order.orderType !== 'recoger') return false;
 
-    // Filtro por buscador
     if (orderSearch.trim()) {
       const q = orderSearch.toLowerCase();
       const matchName = String(order.name || '').toLowerCase().includes(q);
@@ -511,7 +509,7 @@ export default function AdminPanel({ onLogout }) {
       )}
 
       {/* ══════════════ BARRA LATERAL (SIDEBAR) ══════════════ */}
-      <aside className="hidden md:flex w-64 flex-col bg-gray-900 border-r border-gray-800">
+      <aside className="hidden md:flex w-64 flex-col bg-gray-900 border-r border-gray-800 shrink-0">
         <div className="p-6 border-b border-gray-800 flex flex-col items-center justify-center gap-2">
           <img src="/logo.png" alt="Comidas Rápidas Trucco" className="h-16 w-auto object-contain drop-shadow-lg" />
           <p className="text-xs text-gray-400">Trucco Panel</p>
@@ -595,12 +593,12 @@ export default function AdminPanel({ onLogout }) {
         </div>
       </div>
 
-      {/* ══════════════ CONTENIDO PRINCIPAL ══════════════ */}
-      <main className="flex-1 flex flex-col h-screen overflow-y-auto bg-gray-950/50">
+      {/* ══════════════ CONTENIDO PRINCIPAL FULL-WIDTH RESPONSIVO ══════════════ */}
+      <main className="flex-1 flex flex-col h-screen overflow-y-auto bg-gray-950/50 w-full">
 
-        {/* ── TAB PRODUCTOS ── */}
+        {/* ── TAB PRODUCTOS (EXPANSIBLE A TODA LA PANTALLA) ── */}
         {activeTab === 'productos' && (
-          <div className="p-4 md:p-8 space-y-6 md:space-y-8 max-w-5xl mx-auto w-full">
+          <div className="w-full max-w-[1700px] mx-auto p-4 sm:p-6 lg:p-8 xl:p-10 space-y-6 md:space-y-8">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
                 <h2 className="text-2xl md:text-3xl font-black text-white">Menú de Productos</h2>
@@ -635,7 +633,7 @@ export default function AdminPanel({ onLogout }) {
             )}
 
             {/* Estadísticas */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
               {stats.map((stat, i) => (
                 <div key={i} className="bg-gray-900 border border-gray-800 rounded-2xl p-5 hover:border-gray-700 transition">
                   <div className={`w-10 h-10 rounded-xl ${stat.bg} flex items-center justify-center mb-3`}>
@@ -659,7 +657,7 @@ export default function AdminPanel({ onLogout }) {
                   className="w-full bg-transparent text-white rounded-xl pl-12 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-yellow-400/50 text-sm"
                 />
               </div>
-              <div className="w-full md:w-64 border-t md:border-t-0 md:border-l border-gray-800 p-1">
+              <div className="w-full md:w-72 border-t md:border-t-0 md:border-l border-gray-800 p-1">
                 <select
                   value={filterCategory}
                   onChange={(e) => setFilterCategory(e.target.value)}
@@ -673,8 +671,8 @@ export default function AdminPanel({ onLogout }) {
               </div>
             </div>
 
-            {/* Grid de productos */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* Grid de productos que se expande en pantallas grandes */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5 sm:gap-6">
               {filteredProducts.length === 0 ? (
                 <div className="col-span-full text-center py-16 bg-gray-900 border border-gray-800 rounded-3xl">
                   <ChefHat className="w-16 h-16 text-gray-700 mx-auto mb-4" />
@@ -732,9 +730,9 @@ export default function AdminPanel({ onLogout }) {
           </div>
         )}
 
-        {/* ══════════════ TAB CATEGORÍAS ══════════════ */}
+        {/* ══════════════ TAB CATEGORÍAS (EXPANSIBLE) ══════════════ */}
         {activeTab === 'categorias' && (
-          <div className="p-4 md:p-8 space-y-6 md:space-y-8 max-w-5xl mx-auto w-full">
+          <div className="w-full max-w-[1700px] mx-auto p-4 sm:p-6 lg:p-8 xl:p-10 space-y-6 md:space-y-8">
 
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -771,7 +769,7 @@ export default function AdminPanel({ onLogout }) {
             )}
 
             {/* Stats */}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-5">
               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 hover:border-gray-700 transition">
                 <div className="w-10 h-10 rounded-xl bg-yellow-400/10 flex items-center justify-center mb-3">
                   <Tag className="w-5 h-5 text-yellow-400" />
@@ -786,7 +784,7 @@ export default function AdminPanel({ onLogout }) {
                 <div className="text-2xl font-black text-orange-400">{products.length}</div>
                 <div className="text-sm text-gray-400 font-medium">Productos en total</div>
               </div>
-              <div className="col-span-2 md:col-span-1 bg-gray-900 border border-gray-800 rounded-2xl p-5 hover:border-gray-700 transition">
+              <div className="col-span-2 sm:col-span-1 bg-gray-900 border border-gray-800 rounded-2xl p-5 hover:border-gray-700 transition">
                 <div className="w-10 h-10 rounded-xl bg-green-400/10 flex items-center justify-center mb-3">
                   <ChefHat className="w-5 h-5 text-green-400" />
                 </div>
@@ -797,7 +795,7 @@ export default function AdminPanel({ onLogout }) {
               </div>
             </div>
 
-            {/* Grid de tarjetas */}
+            {/* Grid de categorías */}
             {rawCategories.length === 0 ? (
               <div className="text-center py-20 bg-gray-900 border-2 border-dashed border-gray-700 rounded-3xl">
                 <div className="w-20 h-20 bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -813,7 +811,7 @@ export default function AdminPanel({ onLogout }) {
                 </button>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-5">
                 {rawCategories.map((cat, idx) => {
                   const count = products.filter(p => p.category === cat).length;
                   const palettes = [
@@ -890,9 +888,9 @@ export default function AdminPanel({ onLogout }) {
           </div>
         )}
 
-        {/* ══════════════ TAB PEDIDOS (EN VIVO CON GOOGLE SHEETS) ══════════════ */}
+        {/* ══════════════ TAB PEDIDOS (EXPANSIBLE CON GRID DE 2 COLUMNAS) ══════════════ */}
         {activeTab === 'pedidos' && (
-          <div className="p-4 md:p-8 space-y-6 md:space-y-8 max-w-5xl mx-auto w-full">
+          <div className="w-full max-w-[1700px] mx-auto p-4 sm:p-6 lg:p-8 xl:p-10 space-y-6 md:space-y-8">
 
             {/* Header de Pedidos */}
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -947,7 +945,7 @@ export default function AdminPanel({ onLogout }) {
             )}
 
             {/* Stats resumen de pedidos */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 sm:gap-4">
               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 hover:border-gray-700 transition">
                 <div className="text-xs text-gray-400 font-bold mb-1">🟡 Pendientes</div>
                 <div className="text-2xl font-black text-yellow-400">{pendingOrdersCount}</div>
@@ -1008,10 +1006,10 @@ export default function AdminPanel({ onLogout }) {
               </div>
             </div>
 
-            {/* Listado de tarjetas de pedidos */}
-            <div className="grid grid-cols-1 gap-5">
+            {/* Listado de pedidos en cuadrícula de 2 columnas en pantallas grandes */}
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 sm:gap-6">
               {filteredOrders.length === 0 ? (
-                <div className="text-center py-20 bg-gray-900 rounded-3xl border border-gray-800">
+                <div className="col-span-full text-center py-20 bg-gray-900 rounded-3xl border border-gray-800">
                   <ClipboardList className="w-16 h-16 text-gray-700 mx-auto mb-4" />
                   <h3 className="text-xl font-bold text-gray-300">No hay pedidos para mostrar</h3>
                   <p className="text-gray-500 mt-2 max-w-sm mx-auto text-sm">
@@ -1060,10 +1058,10 @@ export default function AdminPanel({ onLogout }) {
                       </div>
 
                       {/* Cuerpo: Datos del Cliente + Detalle de productos */}
-                      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 py-5 border-b border-gray-800">
+                      <div className="grid grid-cols-1 md:grid-cols-12 gap-5 py-5 border-b border-gray-800">
 
                         {/* Columna izquierda: Datos del cliente (5 cols) */}
-                        <div className="lg:col-span-5 space-y-3 bg-gray-950 p-4 rounded-2xl border border-gray-800">
+                        <div className="md:col-span-5 space-y-3 bg-gray-950 p-4 rounded-2xl border border-gray-800">
                           <div>
                             <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 block mb-0.5">Cliente</span>
                             <h3 className="text-lg font-black text-white">{order.name}</h3>
@@ -1107,18 +1105,17 @@ export default function AdminPanel({ onLogout }) {
 
                           {order.notes && (
                             <div className="bg-yellow-950/30 border border-yellow-900/40 p-3 rounded-xl">
-                              <span className="text-[11px] font-bold text-yellow-400 block mb-0.5">Observaciones del cliente:</span>
+                              <span className="text-[11px] font-bold text-yellow-400 block mb-0.5">Observaciones:</span>
                               <p className="text-xs text-yellow-200/90 italic">"{order.notes}"</p>
                             </div>
                           )}
                         </div>
 
                         {/* Columna derecha: Productos y Total (7 cols) */}
-                        <div className="lg:col-span-7 flex flex-col justify-between space-y-4">
+                        <div className="md:col-span-7 flex flex-col justify-between space-y-4">
                           <div>
                             <span className="text-[11px] font-bold uppercase tracking-wider text-gray-500 block mb-2">Detalle de Productos</span>
                             
-                            {/* Si tiene items como array */}
                             {Array.isArray(order.items) && order.items.length > 0 ? (
                               <div className="space-y-2 bg-gray-950/60 p-3.5 rounded-2xl border border-gray-800/80">
                                 {order.items.map((item, idx) => (
@@ -1139,7 +1136,6 @@ export default function AdminPanel({ onLogout }) {
                                 ))}
                               </div>
                             ) : (
-                              /* Fallback a resumen texto */
                               <div className="bg-gray-950/60 p-4 rounded-2xl border border-gray-800/80 text-sm text-gray-300 leading-relaxed">
                                 {order.itemsSummary || 'Sin detalle de productos'}
                               </div>
