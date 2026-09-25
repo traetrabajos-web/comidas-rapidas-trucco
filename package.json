@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "docs:pdf": "node scripts/generate_docs_pdf.cjs",
     "lint": "oxlint",
     "preview": "vite preview"
   },
